@@ -111,6 +111,38 @@ body {
   font-size: 11px;
 }
 
+/* Tab bar (section sub-navigation, e.g. Payroll) ------------------------- */
+
+.tabbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
+  box-shadow: var(--shadow);
+}
+
+.tabbar .tab {
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tabbar .tab:hover:not(.active) {
+  background: #eef1f7;
+  color: var(--ink);
+}
+
+.tabbar .tab.active {
+  background: var(--brand);
+  color: #fff;
+}
+
 /* Content ----------------------------------------------------------------- */
 
 .content {

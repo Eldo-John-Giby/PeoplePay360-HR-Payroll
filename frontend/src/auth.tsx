@@ -137,3 +137,37 @@ export function addDaysIso(days: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+export function fmtMoney(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+export function fmtNum(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("en-IN").format(value);
+}
+
+/** First day of the NEXT month, ISO (YYYY-MM-DD) — the payrun wizard default. */
+export function nextMonthStartIso(): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Last day of `monthStartIso` (YYYY-MM-01). */
+export function monthEndIso(monthStartIso: string): string {
+  const [y, m] = monthStartIso.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${pad(m)}-${pad(last)}`;
+}

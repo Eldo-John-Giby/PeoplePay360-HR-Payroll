@@ -32,6 +32,8 @@ function NavItem({
 
 export function Layout() {
   const { user, logout, isHr, hasRole } = useAuth();
+  const isPayroll = hasRole("HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN");
+  const isEmployee = hasRole("EMPLOYEE");
 
   return (
     <div className="app">
@@ -57,12 +59,17 @@ export function Layout() {
               title="Provision + manage login accounts (ADMIN only)"
             />
           )}
-          <NavItem
-            to="/payroll"
-            label="Payroll"
-            disabled
-            title="Payroll screens wire in once Steve's endpoints stabilize"
-          />
+          {(isPayroll || isEmployee) && (
+            <NavItem
+              to={isPayroll ? "/payroll" : "/payroll/payslips"}
+              label={isPayroll ? "Payroll" : "My Payslips"}
+              title={
+                isPayroll
+                  ? "Payruns, payslips, salary configuration & dashboard"
+                  : "Your payslips + PDF download"
+              }
+            />
+          )}
         </nav>
         <div className="userbox">
           <div className="user-meta">

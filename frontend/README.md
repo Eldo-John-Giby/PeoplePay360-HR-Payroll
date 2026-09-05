@@ -1,7 +1,9 @@
-# PeoplePay360 — Attendance & Time Off frontend (Ambuj's slice)
+# PeoplePay360 — web frontend (React + Vite + TypeScript)
 
-React + TypeScript SPA (Vite) for the **Attendance + Time Off** module. Built
-against the Attendance/TimeOff API and the shared auth endpoints only.
+React + TypeScript SPA (Vite) covering Attendance + Time Off (Ambuj's slice),
+Employee directory (Ameen's API) and the full Payroll section (Steve's
+endpoints: payrun wizard + lifecycle, payslips + PDF, salary rules /
+structures config, dashboard KPIs + charts).
 
 ## Run
 
@@ -43,14 +45,17 @@ npm run build                          # typecheck + production bundle
 | Balances | EMPLOYEE `/me`, HR filtered | `/time-off/balances` |
 | Time off types — config + create/deactivate | HR writes, all read | `/time-off/types` |
 | Allocations — grant + approve/refuse | HR | `/time-off/allocations` |
+| Payroll overview — composable filters (period/department/type/company) driving 5 KPI cards, dept bars, monthly trend, payslip status, payroll alerts, attendance + time-off + department overviews | payroll roles | `/dashboard/*` |
+| Payruns — list + 2-step wizard + detail (compute/validate/mark-paid/cancel/send) | payroll roles | `/payroll/payruns*` |
+| Payslips — register w/ filters + detail + PDF | payroll roles; EMPLOYEE `/me` + own PDF | `/payroll/payslips*` |
+| Salary rules — global computation library | writes: manager/ADMIN | `/payroll/salary-rules` |
+| Salary structures — ordered rule chains | writes: manager/ADMIN | `/payroll/salary-structures*` |
 
-The Employee directory screen (nav, HR only) wraps Ameen's `/employees` and
-shows an explanatory empty state until his slice merges — the rest of the app
-is unaffected. Payroll/payslips/dashboard (Steve) stays disabled in the nav
-until the shared OpenAPI contract lands. Where a form needs an employee, it
-takes a numeric employee id for now; ids are visible in the HR lists, and the
-directory deep-links `?employee=<id>` into attendance and "request on behalf"
-forms once populated.
+Nav + routes gate payroll by role: HR_PAYROLL_USER / HR_PAYROLL_MANAGER /
+ADMIN get the whole section; EMPLOYEE gets a self-service "My Payslips" entry
+(own payslips + PDF download, matching the backend RBAC); HR_MANAGER sees no
+payroll entry. Where a form needs an employee, it takes a numeric employee
+id for now; ids are visible in the HR lists.
 
 ## Demo script (attendance)
 
@@ -72,8 +77,14 @@ forms once populated.
 5. Allocations → create a grant → approve it → balance reflects it.
 
 Seed accounts (password `Password@123`): `admin@oxp.com` (ADMIN),
-`divya.nair@oxp.com` (HR_MANAGER), `john.dsouza@oxp.com` / `aarav.mehta@oxp.com`
-(EMPLOYEE).
+`neha.patel@oxp.com` (HR_PAYROLL_USER — payroll read + run actions),
+`divya.nair@oxp.com` (HR_MANAGER — time-off/HR, no payroll),
+`john.dsouza@oxp.com` / `aarav.mehta@oxp.com` (EMPLOYEE).
+
+Payroll demo: log in as `neha.patel@oxp.com` → Payroll → Payruns → open the
+seeded September run (id 2) → **Compute** → **Validate** is blocked by Kiran
+Joshi's `missing_contract` warning → Payslips → **PDF**. Salary config
+writes (new rule / structure chains) need `admin@oxp.com`.
 
 ## Notes
 

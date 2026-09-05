@@ -42,6 +42,7 @@ from app.models.attendance import Attendance
 from app.models.auth import Role, User
 from app.models.employee import Contract, Employee, EmployeeBankDetail
 from app.models.enums import (
+    AllocationStatus,
     AttendanceStatus,
     ComputationMethod,
     ContractStatus,
@@ -64,7 +65,7 @@ from app.models.payroll import (
     SalaryStructure,
     SalaryStructureRule,
 )
-from app.models.timeoff import TimeOffRequest, TimeOffType
+from app.models.timeoff import TimeOffAllocation, TimeOffRequest, TimeOffType
 from app.modules.payroll import engine, service
 from app.modules.payroll.engine import (
     PayrollEngineError,
@@ -946,6 +947,213 @@ def test_attendance_overview_computes_absent_from_schedule(db):
     assert ov.manual_edits == 0
 
 
+def _add_payslip(
+    db, structure, emp, status, net, period=(date(2026, 1, 1), date(2026, 1, 31))
+) -> Payslip:
+    """Isolated helper: one payslip for `emp` in its own payrun (the
+    payrun_id+employee_id UNIQUE constraint forbids two payslips for the same
+    employee inside one payrun)."""
+    payrun = _make_payrun(db, structure, period[0], period[1], [emp])
+    ps = Payslip(
+        payrun_id=payrun.id, employee_id=emp.id,
+        period_start=period[0], period_end=period[1],
+        gross_salary=net, net_salary=net, status=status,
+    )
+    db.add(ps)
+    db.flush()
+    return ps
+
+
+def test_dashboard_filters_compose_company_department_type(db):
+    """All dashboard filters AND-compose: company, department and employee
+    type each narrow the paid-only KPI total; combinations intersect."""
+    structure, _ = _make_structure(db)
+    # each _make_employee creates its OWN company + department, so the two
+    # employees below are cleanly separable by company / department filters
+    emp_a, _ = _make_employee(db, structure, wage=Decimal("1000.00"))
+    emp_b, _ = _make_employee(db, structure, wage=Decimal("1000.00"),
+                              employee_type=EmployeeType.part_time)
+    jan = (date(2026, 1, 1), date(2026, 1, 31))
+    _add_payslip(db, structure, emp_a, PayrunStatus.paid, Decimal("1000.00"), jan)
+    _add_payslip(db, structure, emp_b, PayrunStatus.paid, Decimal("2000.00"), jan)
+
+    # no seeded payroll in Jan 2026, so unfiltered == exactly these two
+    all_kpis = service.get_kpis(db, jan[0], jan[1], None, None, None)
+    assert all_kpis.total_net_salary_paid == Decimal("3000.00")
+
+    by_company_a = service.get_kpis(
+        db, jan[0], jan[1], None, None, emp_a.company_id
+    )
+    assert by_company_a.total_net_salary_paid == Decimal("1000.00")
+    by_company_b = service.get_kpis(
+        db, jan[0], jan[1], None, None, emp_b.company_id
+    )
+    assert by_company_b.total_net_salary_paid == Decimal("2000.00")
+
+    # company + department must INTERSECT (AND) — mismatched pair -> 0
+    crossed = service.get_kpis(
+        db, jan[0], jan[1], emp_b.department_id, None, emp_a.company_id
+    )
+    assert crossed.total_net_salary_paid == Decimal("0")
+
+    # employee type narrows too, and still composes with company
+    ft = service.get_kpis(
+        db, jan[0], jan[1], None, EmployeeType.full_time, None
+    )
+    assert ft.total_net_salary_paid == Decimal("1000.00")
+    pt_in_company_a = service.get_kpis(
+        db, jan[0], jan[1], None, EmployeeType.part_time, emp_a.company_id
+    )
+    assert pt_in_company_a.total_net_salary_paid == Decimal("0")
+
+    # salary-by-department respects the same company scope
+    dept_b_name = db.scalar(
+        select(Department.name).where(Department.id == emp_b.department_id)
+    )
+    depts = service.get_salary_by_department(
+        db, jan[0], jan[1], None, None, emp_b.company_id
+    )
+    assert [d.department_name for d in depts] == [dept_b_name]
+    assert depts[0].total_salary == Decimal("2000.00")
+    assert depts[0].headcount == 1
+
+
+def test_payslip_status_overview_counts_statuses_and_warnings(db):
+    """Status distribution counts every state; unvalidated = draft+computed;
+    with_warnings counts open payslips carrying a real warning (SENT_AT
+    sentinels excluded from the count)."""
+    structure, _ = _make_structure(db)
+    emp, _ = _make_employee(db, structure)
+    jan = (date(2026, 1, 1), date(2026, 1, 31))
+    paid = _add_payslip(db, structure, emp, PayrunStatus.paid, Decimal("100"), jan)
+    comp = _add_payslip(db, structure, emp, PayrunStatus.computed, Decimal("200"), jan)
+    vald = _add_payslip(db, structure, emp, PayrunStatus.validated, Decimal("300"), jan)
+    draft = _add_payslip(db, structure, emp, PayrunStatus.draft, Decimal("400"), jan)
+
+    # one REAL warning on the computed (open) payslip
+    db.add(PayslipWarning(
+        payslip_id=comp.id, warning_type=PayslipWarningType.missing_bank_details,
+        message="No bank details on file.",
+    ))
+    # one SENT_AT sentinel on the draft payslip — must NOT count as a warning
+    db.add(PayslipWarning(
+        payslip_id=draft.id, warning_type=PayslipWarningType.other,
+        message="SENT_AT:2026-01-01T00:00:00+00:00",
+    ))
+    db.flush()
+
+    ov = service.get_payslip_status_overview(
+        db, jan[0], jan[1], emp.department_id, None, None
+    )
+    assert (ov.paid, ov.computed, ov.validated, ov.draft) == (1, 1, 1, 1)
+    assert ov.cancelled == 0
+    assert ov.unvalidated == 2  # computed + draft
+    assert ov.with_warnings == 1  # sentinel excluded
+
+    # scope out the draft payslip via period: only paid+computed+validated in
+    # Feb? No — instead prove the paid-only KPI also stays 1 for this dept.
+    kpis = service.get_kpis(db, jan[0], jan[1], emp.department_id, None, None)
+    assert kpis.payslips_generated == 4
+    assert kpis.total_net_salary_paid == Decimal("100")
+    assert paid.id and vald.id  # both referenced (no-op sanity)
+
+
+def test_payroll_alerts_group_by_db_warnings_and_unvalidated(db):
+    """Alerts group real DB warning rows of draft/computed payslips (sentinel
+    never surfaces) and report the unvalidated count from live statuses."""
+    structure, _ = _make_structure(db)
+    emp, _ = _make_employee(db, structure)
+    jan = (date(2026, 1, 1), date(2026, 1, 31))
+    with_warn = _add_payslip(db, structure, emp, PayrunStatus.computed, Decimal("100"), jan)
+    sentinel_only = _add_payslip(db, structure, emp, PayrunStatus.computed, Decimal("100"), jan)
+    plain_draft = _add_payslip(db, structure, emp, PayrunStatus.draft, Decimal("100"), jan)
+    db.add(PayslipWarning(
+        payslip_id=with_warn.id,
+        warning_type=PayslipWarningType.missing_contract,
+        message="No running contract for the period.",
+    ))
+    db.add(PayslipWarning(
+        payslip_id=sentinel_only.id, warning_type=PayslipWarningType.other,
+        message="SENT_AT:2026-01-02T00:00:00+00:00",
+    ))
+    db.flush()
+
+    res = service.get_payroll_alerts(
+        db, jan[0], jan[1], emp.department_id, None, None
+    )
+    assert {a.warning_type: a.count for a in res.alerts} == {
+        PayslipWarningType.missing_contract: 1
+    }
+    assert res.total_open_payslips == 1  # sentinel-only payslip is NOT open
+    assert res.unvalidated_payslips == 3  # computed + computed + draft
+
+
+def test_time_off_overview_by_type_period_scoped(db):
+    """Per-type rows combine approved days (day units, in-period), pending
+    requests and live remaining balances from real request rows."""
+    structure, _ = _make_structure(db)
+    emp, _ = _make_employee(db, structure)
+    suffix = uuid.uuid4().hex[:6]
+    totype = TimeOffType(
+        name=f"Study Leave {suffix}", unit=TimeOffUnit.days,
+        requires_allocation=False, requires_approval=True,
+        affects_payroll=True,
+    )
+    db.add(totype)
+    db.flush()
+
+    jan = (date(2026, 1, 5), date(2026, 1, 9))   # in-period approved + pending
+    feb = (date(2026, 2, 2), date(2026, 2, 6))   # out-of-period approved
+    db.add(TimeOffRequest(
+        employee_id=emp.id, time_off_type_id=totype.id,
+        date_from=jan[0], date_to=jan[1], duration=Decimal("2.00"),
+        status=TimeOffRequestStatus.approved,
+    ))
+    db.add(TimeOffRequest(
+        employee_id=emp.id, time_off_type_id=totype.id,
+        date_from=jan[0], date_to=jan[0], duration=Decimal("1.00"),
+        status=TimeOffRequestStatus.to_approve,
+    ))
+    db.add(TimeOffRequest(
+        employee_id=emp.id, time_off_type_id=totype.id,
+        date_from=feb[0], date_to=feb[1], duration=Decimal("3.00"),
+        status=TimeOffRequestStatus.approved,
+    ))
+    # approved allocation -> live view shows remaining = 10 allocated - 5 taken
+    db.add(TimeOffAllocation(
+        employee_id=emp.id, time_off_type_id=totype.id,
+        allocated_amount=Decimal("10.00"),
+        valid_from=date(2026, 1, 1), valid_to=None,
+        status=AllocationStatus.approved,
+    ))
+    db.flush()
+
+    ov = service.get_time_off_overview(
+        db, date(2026, 1, 1), date(2026, 1, 31), emp.department_id, None, None
+    )
+    assert ov.approved_days == Decimal("2.00")  # Feb request is outside period
+    assert ov.pending_requests == 1
+    row = next(
+        (r for r in ov.by_type if r.time_off_type_name == totype.name), None
+    )
+    assert row is not None
+    assert row.approved_days == Decimal("2.00")
+    assert row.pending_requests == 1
+    assert row.remaining == Decimal("5.00")  # view: 10 allocated - 5 approved taken
+
+
+def test_dashboard_filter_options_live_rows(db):
+    """Filter-options returns the REAL active companies/departments created
+    here (plus seed data) and the employee-type enum values — nothing
+    hardcoded client-side."""
+    structure, _ = _make_structure(db)
+    emp, _ = _make_employee(db, structure)
+    opts = service.get_dashboard_filter_options(db)
+    assert any(c.id == emp.company_id for c in opts.companies)
+    assert any(d.id == emp.department_id for d in opts.departments)
+    assert opts.employee_types == ["full_time", "part_time", "contract", "intern"]
+
+
 # -- bulk email --------------------------------------------------------------
 # Per-recipient resilience + idempotency: missing bank details skips ONE
 # employee and reports it while the other still sends (console transport); a
@@ -1066,9 +1274,23 @@ def test_rbac_salary_rules_read_write_split():
         r = client.get("/api/v1/dashboard/kpis", headers=auth(hr_manager))
         assert r.status_code == 403, r.text
 
-        # EMPLOYEE: no dashboard access
-        r = client.get("/api/v1/dashboard/kpis", headers=auth(employee))
+        # EMPLOYEE: no dashboard access (incl. the newer panels/options)
+        for path in (
+            "/api/v1/dashboard/kpis",
+            "/api/v1/dashboard/payslip-status",
+            "/api/v1/dashboard/attendance-overview",
+            "/api/v1/dashboard/filter-options",
+        ):
+            r = client.get(path, headers=auth(employee))
+            assert r.status_code == 403, (path, r.text)
+        r = client.get("/api/v1/dashboard/filter-options", headers=auth(hr_manager))
         assert r.status_code == 403, r.text
+
+        # ADMIN: full dashboard access (positive control)
+        r = client.get("/api/v1/dashboard/filter-options", headers=auth(admin))
+        assert r.status_code == 200, r.text
+        r = client.get("/api/v1/dashboard/payslip-status", headers=auth(admin))
+        assert r.status_code == 200, r.text
 
         # ADMIN: full write access (positive control) — cleaned up below
         payload = {

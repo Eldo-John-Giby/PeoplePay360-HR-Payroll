@@ -5,18 +5,43 @@
 import type {
   AllocationStatus,
   Attendance,
+  AttendanceOverview,
   AttendanceStatus,
   AttendanceSummary,
+  CancelResult,
+  ComputationMethod,
+  ComputeResult,
+  DashboardFilterOptions,
+  DashboardFilters,
+  DraftScopeResult,
+  Kpis,
+  MarkPaidResult,
   Me,
+  MonthlyTrendItem,
   Page,
+  PayrollAlertsResponse,
+  Payrun,
+  PayrunScope,
+  PayrunSummary,
+  Payslip,
+  PayslipStatusOverview,
+  PayslipSummaryItem,
   RequestStatus,
+  SalaryByDepartmentItem,
+  SalaryRule,
+  SalaryRuleCategory,
+  SalaryStructure,
+  SalaryStructureSummary,
+  SendPayslipsResult,
   TimeOffAllocation,
   TimeOffBalance,
+  TimeOffOverview,
   TimeOffRequest,
   TimeOffType,
   TimeOffUnit,
   TokenResponse,
   UserOut,
+  ValidateResult,
 } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api/v1";
@@ -409,4 +434,279 @@ export function refuseRequest(id: number): Promise<TimeOffRequest> {
 
 export function cancelRequest(id: number): Promise<TimeOffRequest> {
   return request<TimeOffRequest>("POST", `/time-off/requests/${id}/cancel`);
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — salary rules + structures
+// ---------------------------------------------------------------------------
+
+// --- salary rules (global library) ----------------------------------------
+
+export interface SalaryRuleFilters {
+  code?: string;
+  category?: SalaryRuleCategory | "";
+  is_active?: boolean;
+}
+
+export function listSalaryRules(
+  filters: SalaryRuleFilters = {},
+  pageSize = 100,
+): Promise<Page<SalaryRule>> {
+  return request<Page<SalaryRule>>(
+    "GET",
+    `/payroll/salary-rules${queryString({ ...filters, page_size: pageSize })}`,
+  );
+}
+
+export interface SalaryRulePayload {
+  code: string;
+  name: string;
+  category: SalaryRuleCategory;
+  computation_method: ComputationMethod;
+  amount?: string | null;
+  percentage?: string | null;
+  percentage_base_code?: string | null;
+  formula?: string | null;
+  default_sequence?: number;
+  is_active?: boolean;
+}
+
+export function createSalaryRule(payload: SalaryRulePayload): Promise<SalaryRule> {
+  return request<SalaryRule>("POST", "/payroll/salary-rules", payload);
+}
+
+export function updateSalaryRule(
+  id: number,
+  patch: Partial<SalaryRulePayload>,
+): Promise<SalaryRule> {
+  return request<SalaryRule>("PATCH", `/payroll/salary-rules/${id}`, patch);
+}
+
+export function deactivateSalaryRule(id: number): Promise<void> {
+  return request<void>("DELETE", `/payroll/salary-rules/${id}`);
+}
+
+// --- salary structures (ordered rule chains) -------------------------------
+
+export function listSalaryStructures(
+  pageSize = 100,
+): Promise<Page<SalaryStructureSummary>> {
+  return request<Page<SalaryStructureSummary>>(
+    "GET",
+    `/payroll/salary-structures${queryString({ page_size: pageSize })}`,
+  );
+}
+
+export function createSalaryStructure(payload: {
+  name: string;
+  code: string;
+  is_active?: boolean;
+}): Promise<SalaryStructure> {
+  return request<SalaryStructure>("POST", "/payroll/salary-structures", payload);
+}
+
+export function getSalaryStructure(id: number): Promise<SalaryStructure> {
+  return request<SalaryStructure>("GET", `/payroll/salary-structures/${id}`);
+}
+
+export function setStructureActive(
+  id: number,
+  is_active: boolean,
+): Promise<SalaryStructure> {
+  return request<SalaryStructure>(
+    "PATCH",
+    `/payroll/salary-structures/${id}`,
+    { is_active },
+  );
+}
+
+export function replaceStructureRules(
+  structureId: number,
+  rules: { salary_rule_id: number; sequence: number }[],
+): Promise<SalaryStructure> {
+  return request<SalaryStructure>(
+    "PUT",
+    `/payroll/salary-structures/${structureId}/rules`,
+    { rules },
+  );
+}
+
+// --- payruns: 2-step wizard + lifecycle ------------------------------------
+
+export function draftScope(scope: PayrunScope): Promise<DraftScopeResult> {
+  return request<DraftScopeResult>("POST", "/payroll/payruns/draft-scope", scope);
+}
+
+export function createPayrun(
+  scope: PayrunScope,
+  employeeIds: number[],
+): Promise<Payrun> {
+  return request<Payrun>("POST", "/payroll/payruns", {
+    scope,
+    employee_ids: employeeIds,
+  });
+}
+
+export function listPayruns(
+  filters: { status?: string; department_filter_id?: number } = {},
+): Promise<Page<PayrunSummary>> {
+  return request<Page<PayrunSummary>>(
+    "GET",
+    `/payroll/payruns${queryString({ ...filters, page_size: 100 })}`,
+  );
+}
+
+export function getPayrun(id: number): Promise<Payrun> {
+  return request<Payrun>("GET", `/payroll/payruns/${id}`);
+}
+
+export function computePayrun(id: number): Promise<ComputeResult> {
+  return request<ComputeResult>("POST", `/payroll/payruns/${id}/compute`);
+}
+
+export function validatePayrun(id: number): Promise<ValidateResult> {
+  return request<ValidateResult>("POST", `/payroll/payruns/${id}/validate`);
+}
+
+export function markPayrunPaid(id: number): Promise<MarkPaidResult> {
+  return request<MarkPaidResult>("POST", `/payroll/payruns/${id}/mark-paid`);
+}
+
+export function cancelPayrun(id: number): Promise<CancelResult> {
+  return request<CancelResult>("POST", `/payroll/payruns/${id}/cancel`);
+}
+
+export function sendPayrunPayslips(id: number): Promise<SendPayslipsResult> {
+  return request<SendPayslipsResult>("POST", `/payroll/payruns/${id}/send-payslips`);
+}
+
+// --- payslips --------------------------------------------------------------
+
+export function listPayslips(
+  filters: { payrun_id?: number; employee_id?: number; status?: string } = {},
+  pageSize = 100,
+): Promise<Page<PayslipSummaryItem>> {
+  return request<Page<PayslipSummaryItem>>(
+    "GET",
+    `/payroll/payslips${queryString({ ...filters, page_size: pageSize })}`,
+  );
+}
+
+export function listMyPayslips(pageSize = 100): Promise<Page<PayslipSummaryItem>> {
+  return request<Page<PayslipSummaryItem>>(
+    "GET",
+    `/payroll/payslips/me${queryString({ page_size: pageSize })}`,
+  );
+}
+
+export function getPayslip(id: number): Promise<Payslip> {
+  return request<Payslip>("GET", `/payroll/payslips/${id}`);
+}
+
+/** Download a payslip PDF (needs the bearer token; a plain <a href> won't
+ * carry it, so we fetch the bytes and click a blob link). */
+export async function downloadPayslipPdf(id: number): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/payroll/payslips/${id}/pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let detail = `PDF download failed (${res.status})`;
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (data.detail) detail = data.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payslip-${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// --- dashboard (read-only analytics) ---------------------------------------
+// Every endpoint composes the same optional filters (?period_start= &
+// period_end= & department_id= & employee_type= & company_id=, AND logic)
+// so all cards / charts / tables / alerts update together for one state.
+
+/** Serialize DashboardFilters into a query string (empty values dropped). */
+function filterQs(filters: DashboardFilters, extra?: Record<string, string | number>) {
+  return queryString({
+    period_start: filters.period_start,
+    period_end: filters.period_end,
+    department_id: filters.department_id,
+    employee_type: filters.employee_type,
+    company_id: filters.company_id,
+    ...extra,
+  });
+}
+
+export function fetchDashboardFilterOptions(): Promise<DashboardFilterOptions> {
+  return request<DashboardFilterOptions>("GET", "/dashboard/filter-options");
+}
+
+export function fetchKpis(filters: DashboardFilters = {}): Promise<Kpis> {
+  return request<Kpis>("GET", `/dashboard/kpis${filterQs(filters)}`);
+}
+
+export function fetchSalaryByDepartment(
+  filters: DashboardFilters = {},
+): Promise<SalaryByDepartmentItem[]> {
+  return request<SalaryByDepartmentItem[]>(
+    "GET",
+    `/dashboard/salary-by-department${filterQs(filters)}`,
+  );
+}
+
+export function fetchMonthlyTrend(
+  months: number,
+  filters: DashboardFilters = {},
+): Promise<MonthlyTrendItem[]> {
+  return request<MonthlyTrendItem[]>(
+    "GET",
+    `/dashboard/monthly-net-salary-trend${filterQs(filters, { months })}`,
+  );
+}
+
+export function fetchPayrollAlerts(
+  filters: DashboardFilters = {},
+): Promise<PayrollAlertsResponse> {
+  return request<PayrollAlertsResponse>(
+    "GET",
+    `/dashboard/payroll-alerts${filterQs(filters)}`,
+  );
+}
+
+export function fetchPayslipStatus(
+  filters: DashboardFilters = {},
+): Promise<PayslipStatusOverview> {
+  return request<PayslipStatusOverview>(
+    "GET",
+    `/dashboard/payslip-status${filterQs(filters)}`,
+  );
+}
+
+export function fetchAttendanceOverview(
+  filters: DashboardFilters = {},
+): Promise<AttendanceOverview> {
+  return request<AttendanceOverview>(
+    "GET",
+    `/dashboard/attendance-overview${filterQs(filters)}`,
+  );
+}
+
+export function fetchTimeOffOverview(
+  filters: DashboardFilters = {},
+): Promise<TimeOffOverview> {
+  return request<TimeOffOverview>(
+    "GET",
+    `/dashboard/time-off-overview${filterQs(filters)}`,
+  );
 }
