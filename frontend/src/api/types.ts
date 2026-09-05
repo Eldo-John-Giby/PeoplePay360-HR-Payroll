@@ -179,12 +179,132 @@ export interface EmployeeListItem {
 }
 
 // ---------------------------------------------------------------------------
-// Payroll (Steve's slice — salary config, payruns, payslips, dashboard)
+// Organization — departments / job positions (Ameen's slice)
 // ---------------------------------------------------------------------------
-// Shapes mirror the Pydantic schemas in app/schemas/payroll.py. Money arrives
-// as strings (Decimal serialization); parse with Number() for display only.
 
-export type ComputationMethod = "fixed" | "percentage" | "formula";
+export interface DepartmentSummary {
+  id: number;
+  name: string;
+  is_active?: boolean;
+}
+
+export interface JobPositionSummary {
+  id: number;
+  title: string;
+  is_active?: boolean;
+}
+
+export interface EmployeeSummaryRef {
+  id: number;
+  full_name: string;
+  work_email: string;
+  status?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Contracts (Ameen's slice)
+// ---------------------------------------------------------------------------
+
+export type ContractStatus = "draft" | "running" | "expired" | "cancelled";
+
+export interface WorkingScheduleRef {
+  id: number;
+  name: string;
+  schedule_type?: string | null;
+  total_weekly_hours?: string | null;
+}
+
+export interface SalaryStructureRef {
+  id: number;
+  name: string;
+  code: string;
+}
+
+export interface Contract {
+  id: number;
+  contract_number: string;
+  employee: EmployeeSummaryRef | null;
+  department: DepartmentSummary | null;
+  job_position: JobPositionSummary | null;
+  working_schedule: WorkingScheduleRef | null;
+  salary_structure: SalaryStructureRef | null;
+  wage_monthly: string;
+  start_date: string;
+  end_date: string | null;
+  status: ContractStatus;
+  version_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractCreatePayload {
+  employee_id: number;
+  department_id: number;
+  job_position_id: number;
+  working_schedule_id: number;
+  salary_structure_id: number;
+  wage_monthly: string;
+  start_date: string;
+  end_date?: string | null;
+}
+
+export interface ContractUpdatePayload {
+  version_id?: number | null;
+  department_id?: number | null;
+  job_position_id?: number | null;
+  working_schedule_id?: number | null;
+  salary_structure_id?: number | null;
+  wage_monthly?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Working schedules (Ameen's slice)
+// ---------------------------------------------------------------------------
+
+export type ScheduleType = "full_time" | "part_time" | "custom";
+
+export interface WorkingScheduleLine {
+  id: number;
+  working_schedule_id: number;
+  day_of_week: number; // 0=Mon .. 6=Sun
+  start_time: string; // "HH:MM:SS"
+  end_time: string;
+  break_minutes: number;
+}
+
+export interface WorkingScheduleLineInput {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  break_minutes: number;
+}
+
+export interface WorkingScheduleItem {
+  id: number;
+  name: string;
+  schedule_type: ScheduleType;
+  is_active: boolean;
+  total_weekly_hours: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkingScheduleDetail extends WorkingScheduleItem {
+  lines: WorkingScheduleLine[];
+}
+
+export interface WorkingScheduleCreatePayload {
+  name: string;
+  schedule_type: ScheduleType;
+  is_active?: boolean;
+  lines: WorkingScheduleLineInput[];
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — salary rules & structures (Steve's slice)
+// ---------------------------------------------------------------------------
 
 export type SalaryRuleCategory =
   | "basic"
@@ -194,15 +314,7 @@ export type SalaryRuleCategory =
   | "contribution"
   | "net";
 
-export type PayrunStatus = "draft" | "computed" | "validated" | "paid" | "cancelled";
-
-export type PayslipWarningType =
-  | "missing_bank_details"
-  | "duplicate_payslip"
-  | "missing_contract"
-  | "negative_net"
-  | "overlapping_period"
-  | "other";
+export type ComputationMethod = "fixed" | "percentage" | "formula";
 
 export interface SalaryRule {
   id: number;
@@ -218,6 +330,32 @@ export interface SalaryRule {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface SalaryRuleCreatePayload {
+  code: string;
+  name: string;
+  category: SalaryRuleCategory;
+  computation_method: ComputationMethod;
+  amount?: string | null;
+  percentage?: string | null;
+  percentage_base_code?: string | null;
+  formula?: string | null;
+  default_sequence?: number;
+  is_active?: boolean;
+}
+
+export interface SalaryRuleUpdatePayload {
+  code?: string;
+  name?: string;
+  category?: SalaryRuleCategory;
+  computation_method?: ComputationMethod;
+  amount?: string | null;
+  percentage?: string | null;
+  percentage_base_code?: string | null;
+  formula?: string | null;
+  default_sequence?: number;
+  is_active?: boolean;
 }
 
 export interface SalaryStructureSummary {
@@ -237,12 +375,23 @@ export interface SalaryStructure {
   id: number;
   name: string;
   code: string;
-  company_id: number | null;
   is_active: boolean;
   rules: SalaryStructureRuleItem[];
   created_at: string;
   updated_at: string;
 }
+
+export interface SalaryStructureCreatePayload {
+  name: string;
+  code: string;
+  is_active?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — payruns
+// ---------------------------------------------------------------------------
+
+export type PayrunStatus = "draft" | "computed" | "validated" | "paid" | "cancelled";
 
 export interface PayrunScope {
   salary_structure_id: number;
@@ -263,25 +412,10 @@ export interface EligibleEmployee {
   has_contract: boolean;
 }
 
-export interface DraftScopeResult {
+export interface DraftScopeResponse {
   scope: PayrunScope;
   eligible_employees: EligibleEmployee[];
   eligible_count: number;
-}
-
-export interface PayrunSummary {
-  id: number;
-  name: string;
-  salary_structure_id: number;
-  period_start: string;
-  period_end: string;
-  department_filter_id: number | null;
-  employee_type_filter: string | null;
-  status: PayrunStatus;
-  created_by_user_id: number;
-  payslip_count: number;
-  employee_count: number;
-  created_at: string;
 }
 
 export interface PayrunPayslipSummary {
@@ -293,7 +427,21 @@ export interface PayrunPayslipSummary {
   warning_count: number;
 }
 
-export interface Payrun {
+export interface PayrunSummary {
+  id: number;
+  name: string;
+  salary_structure_id: number;
+  period_start: string;
+  period_end: string;
+  department_filter_id: number | null;
+  employee_type_filter: string | null;
+  status: PayrunStatus;
+  payslip_count: number;
+  employee_count: number;
+  created_at: string;
+}
+
+export interface PayrunDetail {
   id: number;
   name: string;
   salary_structure_id: number;
@@ -309,17 +457,11 @@ export interface Payrun {
   payslips: PayrunPayslipSummary[];
 }
 
-export interface ComputeSkippedItem {
-  payslip_id: number;
-  employee_name: string;
-  reason: string;
-}
-
 export interface ComputeResult {
   payrun_id: number;
   status: PayrunStatus;
   payslips_computed: number;
-  payslips_skipped: ComputeSkippedItem[];
+  payslips_skipped: { payslip_id: number; employee_name: string; reason: string }[];
   warnings_added: number;
 }
 
@@ -336,25 +478,16 @@ export interface MarkPaidResult {
   paid_payslips: number;
 }
 
-export interface CancelResult {
-  payrun_id: number;
-  status: PayrunStatus;
-  cancelled_payslips: number;
-}
-
-export interface SendPayslipResultItem {
-  employee_id: number;
-  employee_name: string;
-  sent: boolean;
-  error: string | null;
-}
-
 export interface SendPayslipsResult {
   payrun_id: number;
   sent_count: number;
   skipped_count: number;
-  results: SendPayslipResultItem[];
+  results: { employee_id: number; employee_name: string; sent: boolean; error: string | null }[];
 }
+
+// ---------------------------------------------------------------------------
+// Payroll — payslips
+// ---------------------------------------------------------------------------
 
 export interface PayslipLine {
   id: number;
@@ -368,7 +501,7 @@ export interface PayslipLine {
 
 export interface PayslipWarning {
   id: number;
-  warning_type: PayslipWarningType;
+  warning_type: string;
   message: string;
   created_at: string;
 }
@@ -386,7 +519,7 @@ export interface PayslipSummaryItem {
   warning_count: number;
 }
 
-export interface Payslip {
+export interface PayslipDetail {
   id: number;
   payrun_id: number;
   employee_id: number;
@@ -405,43 +538,16 @@ export interface Payslip {
   warnings: PayslipWarning[];
 }
 
-export interface Kpis {
+// ---------------------------------------------------------------------------
+// Dashboard (Steve's slice)
+// ---------------------------------------------------------------------------
+
+export interface DashboardKpis {
   total_net_salary_paid: string;
   payslips_generated: number;
   average_salary: string;
   approved_time_off_days: string;
   attendance_health_pct: number;
-}
-
-/** Composable dashboard filters — all optional, AND-composed server-side. */
-export interface DashboardFilters {
-  period_start?: string;
-  period_end?: string;
-  department_id?: number;
-  employee_type?: string;
-  company_id?: number;
-}
-
-export interface FilterOption {
-  id: number;
-  name: string;
-  company_id: number | null;
-}
-
-export interface DashboardFilterOptions {
-  companies: FilterOption[];
-  departments: FilterOption[];
-  employee_types: string[];
-}
-
-export interface PayslipStatusOverview {
-  draft: number;
-  computed: number;
-  validated: number;
-  paid: number;
-  cancelled: number;
-  unvalidated: number; // draft + computed — amounts not yet signed off
-  with_warnings: number;
 }
 
 export interface SalaryByDepartmentItem {
@@ -451,20 +557,8 @@ export interface SalaryByDepartmentItem {
 }
 
 export interface MonthlyTrendItem {
-  month: string;
+  month: string; // "YYYY-MM"
   total_net_salary: string;
-}
-
-export interface PayrollAlertItem {
-  warning_type: PayslipWarningType;
-  count: number;
-  payslip_ids: number[];
-}
-
-export interface PayrollAlertsResponse {
-  alerts: PayrollAlertItem[];
-  total_open_payslips: number;
-  unvalidated_payslips: number;
 }
 
 export interface AttendanceOverview {
@@ -477,16 +571,24 @@ export interface AttendanceOverview {
   coverage_pct: number;
 }
 
-export interface TimeOffTypeOverviewItem {
+export interface TimeOffBalanceItem {
   time_off_type_name: string;
-  approved_days: string;
-  pending_requests: number;
   remaining: string;
 }
 
 export interface TimeOffOverview {
   approved_days: string;
   pending_requests: number;
-  balances_by_type: { time_off_type_name: string; remaining: string }[];
-  by_type: TimeOffTypeOverviewItem[];
+  balances_by_type: TimeOffBalanceItem[];
+}
+
+export interface PayrollAlertItem {
+  warning_type: string;
+  count: number;
+  payslip_ids: number[];
+}
+
+export interface PayrollAlerts {
+  alerts: PayrollAlertItem[];
+  total_open_payslips: number;
 }

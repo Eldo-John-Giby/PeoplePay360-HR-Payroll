@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { useAuth } from "./auth";
 import { Layout } from "./components/Layout";
-import { PayrollSection } from "./components/PayrollSection";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { AttendancePage } from "./pages/AttendancePage";
 import { TimeOffRequestsPage } from "./pages/TimeOffRequestsPage";
@@ -12,18 +12,22 @@ import { TypesPage } from "./pages/TypesPage";
 import { AllocationsPage } from "./pages/AllocationsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { AccountsPage } from "./pages/AccountsPage";
-import { PayrollDashboardPage } from "./pages/PayrollDashboardPage";
+import { ContractsPage } from "./pages/ContractsPage";
+import { WorkingSchedulesPage } from "./pages/WorkingSchedulesPage";
+import { SalaryStructuresPage } from "./pages/SalaryStructuresPage";
+import { SalaryRulesPage } from "./pages/SalaryRulesPage";
 import { PayrunsPage } from "./pages/PayrunsPage";
-import { PayrunDetailPage } from "./pages/PayrunDetailPage";
+import { PayrunProcessingPage } from "./pages/PayrunProcessingPage";
 import { PayslipsPage } from "./pages/PayslipsPage";
 import { PayslipDetailPage } from "./pages/PayslipDetailPage";
-import { SalaryRulesPage } from "./pages/SalaryRulesPage";
-import { SalaryStructuresPage } from "./pages/SalaryStructuresPage";
+import { PayrollDashboardPage } from "./pages/PayrollDashboardPage";
+import { AdminPage } from "./pages/AdminPage";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="center">Loading…</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  // Not signed in → back to the landing page, from where they can sign in.
+  if (!user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -35,32 +39,14 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Payroll read role (HR_PAYROLL_USER / HR_PAYROLL_MANAGER / ADMIN). The
- * self-service payslip pages are deliberately NOT behind this — EMPLOYEE
- * users reach those through the section. */
-function RequirePayrollRead({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const ok = user?.roles.some((r) =>
-    ["HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN"].includes(r.name),
-  );
-  if (!ok) return <Navigate to="/payroll/payslips" replace />;
-  return <>{children}</>;
-}
-
-function PayrollIndexRedirect() {
-  const { user } = useAuth();
-  const isPayroll = Boolean(
-    user?.roles.some((r) =>
-      ["HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN"].includes(r.name),
-    ),
-  );
-  return <Navigate to={isPayroll ? "/payroll/overview" : "/payroll/payslips"} replace />;
-}
-
 export default function App() {
   return (
     <Routes>
+      {/* Public marketing landing page — the entry point of the app. */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Authenticated console. */}
       <Route
         element={
           <RequireAuth>
@@ -68,13 +54,21 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/attendance" replace />} />
-        <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/employees" element={<EmployeesPage />} />
+        <Route path="/contracts" element={<ContractsPage />} />
+        <Route path="/working-schedules" element={<WorkingSchedulesPage />} />
         <Route path="/time-off/requests" element={<TimeOffRequestsPage />} />
         <Route path="/time-off/balances" element={<BalancesPage />} />
         <Route path="/time-off/types" element={<TypesPage />} />
         <Route path="/time-off/allocations" element={<AllocationsPage />} />
+        <Route path="/payroll/payruns" element={<PayrunsPage />} />
+        <Route path="/payroll/payruns/:id" element={<PayrunProcessingPage />} />
+        <Route path="/payroll/payslips" element={<PayslipsPage />} />
+        <Route path="/payroll/payslips/:id" element={<PayslipDetailPage />} />
+        <Route path="/payroll/dashboard" element={<PayrollDashboardPage />} />
+        <Route path="/payroll/structures" element={<SalaryStructuresPage />} />
+        <Route path="/payroll/rules" element={<SalaryRulesPage />} />
         <Route
           path="/accounts"
           element={
@@ -83,54 +77,14 @@ export default function App() {
             </RequireAdmin>
           }
         />
-
-        {/* Payroll section — role-aware tab bar inside */}
-        <Route path="/payroll" element={<PayrollSection />}>
-          <Route index element={<PayrollIndexRedirect />} />
-          <Route
-            path="overview"
-            element={
-              <RequirePayrollRead>
-                <PayrollDashboardPage />
-              </RequirePayrollRead>
-            }
-          />
-          <Route
-            path="payruns"
-            element={
-              <RequirePayrollRead>
-                <PayrunsPage />
-              </RequirePayrollRead>
-            }
-          />
-          <Route
-            path="payruns/:payrunId"
-            element={
-              <RequirePayrollRead>
-                <PayrunDetailPage />
-              </RequirePayrollRead>
-            }
-          />
-          {/* payslips: payroll roles see the full register, EMPLOYEE only /me */}
-          <Route path="payslips" element={<PayslipsPage />} />
-          <Route path="payslips/:payslipId" element={<PayslipDetailPage />} />
-          <Route
-            path="salary-rules"
-            element={
-              <RequirePayrollRead>
-                <SalaryRulesPage />
-              </RequirePayrollRead>
-            }
-          />
-          <Route
-            path="salary-structures"
-            element={
-              <RequirePayrollRead>
-                <SalaryStructuresPage />
-              </RequirePayrollRead>
-            }
-          />
-        </Route>
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminPage />
+            </RequireAdmin>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -1,5 +1,5 @@
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth";
@@ -17,6 +17,14 @@ const DEMO_ACCOUNTS = [
   { email: "sara.khan@oxp.com", role: "EMPLOYEE" },
 ];
 
+function BrandMark() {
+  return (
+    <span className="login-mark" aria-hidden="true">
+      P
+    </span>
+  );
+}
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
@@ -25,14 +33,14 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/attendance" replace />;
 
   async function signIn(em: string, pw: string) {
     setError(null);
     setBusy(true);
     try {
       await login(em.trim(), pw);
-      navigate("/", { replace: true });
+      navigate("/attendance", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed.");
     } finally {
@@ -46,61 +54,93 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-wrap">
-      <form className="card login-card" onSubmit={onSubmit}>
-        <h1>PeoplePay360</h1>
-        <p className="muted">Attendance &amp; Time Off console</p>
+    <div className="login-page">
+      {/* Left sidebar */}
+      <aside className="login-side">
+        <Link to="/" className="login-brand">
+          <BrandMark />
+          <span>PeoplePay360</span>
+        </Link>
 
-        <label className="field">
-          <span>Email</span>
-          <input
-            type="email"
-            required
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-          />
-        </label>
-        <label className="field">
-          <span>Password</span>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-        </label>
-
-        {error && <div className="alert alert-error">{error}</div>}
-
-        <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-
-        <div className="demo-hints">
-          <div className="muted">
-            One-click demo logins (all use {DEMO_PASSWORD})
-          </div>
-          {DEMO_ACCOUNTS.map((a) => (
-            <button
-              key={a.email}
-              type="button"
-              className="btn btn-ghost demo-chip"
-              disabled={busy}
-              onClick={() => {
-                setEmail(a.email);
-                setPassword(DEMO_PASSWORD);
-                void signIn(a.email, DEMO_PASSWORD);
-              }}
-            >
-              {a.role} — {a.email}
-            </button>
-          ))}
+        <div className="login-side-body">
+          <h2>Attendance &amp; time off, all in one place.</h2>
+          <p>
+            Check in, ask for leave, approve requests and watch live balances —
+            without a single spreadsheet.
+          </p>
+          <ul className="login-features">
+            <li>Smart check-in / check-out with late &amp; overtime flags</li>
+            <li>Live leave balances — never pre-deducted, never stale</li>
+            <li>Role-based access for employees, HR and payroll</li>
+          </ul>
         </div>
-      </form>
+
+        <div className="login-side-foot">
+          <Link className="login-home" to="/">
+            ← Back to home
+          </Link>
+          <span className="login-side-note">Free demo · seeded data</span>
+        </div>
+      </aside>
+
+      {/* Right panel with the login card */}
+      <div className="login-wrap">
+        <form className="login-card" onSubmit={onSubmit}>
+          <div className="login-card-head">
+            <BrandMark />
+            <h1>Welcome back</h1>
+            <p className="muted">Sign in to your attendance &amp; time off console</p>
+          </div>
+
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              required
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@oxp.com"
+            />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </label>
+
+          {error && <div className="alert alert-error">{error}</div>}
+
+          <button className="btn btn-primary btn-block" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+
+          <div className="login-divider">
+            <span>or use a demo account</span>
+          </div>
+
+          <div className="demo-hints">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button
+                key={a.email}
+                type="button"
+                className="btn btn-ghost demo-chip"
+                disabled={busy}
+                onClick={() => void signIn(a.email, DEMO_PASSWORD)}
+              >
+                <span className="chip-role">{a.role}</span>
+                <span className="chip-email">{a.email}</span>
+              </button>
+            ))}
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
