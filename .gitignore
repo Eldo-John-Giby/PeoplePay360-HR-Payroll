@@ -10,4 +10,7 @@ venv/
 .DS_Store
 coverage.xml
 htmlcov/
-dev.log
+STEVE_PAYROLL_ANALYTICS_UNDERSTANDING.md
+# Throwaway Postgres cluster for tests/test_employees.py (port 5433)
+.pg_test_cluster/
+pg_test_cluster.log

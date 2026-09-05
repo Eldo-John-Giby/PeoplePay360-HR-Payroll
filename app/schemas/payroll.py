@@ -1,5 +1,20 @@
 """Pydantic v2 request/response models for the Payroll module (Steve's slice).
 
+CONNECTIONS MAP (read this first):
+- WHO USES ME: the routers app/modules/payroll/router.py and
+  dashboard_router.py declare `response_model=...` / body-parse with these
+  classes; the service layer builds them from ORM rows (model_validate for
+  from_attributes models, or manual construction for aggregates).
+- IMPORTED FROM: app/models/enums.py (the shared Python enums that mirror
+  the Postgres-native ENUM types Eldo created) and pydantic v2.
+- WHY THEY EXIST: (1) FastAPI validates request bodies and serializes
+  responses through these classes — the contract shown in /docs;
+  (2) validation FAILS FAST here (422) instead of after a DB round-trip;
+  (3) ORM objects are never leaked to the client.
+- RULE: request models validate user input; *Read models (from_attributes)
+  mirror ORM rows; result DTOs (ComputeResult, SendPayslipsResult...) shape
+  action responses; dashboard classes are plain aggregate DTOs.
+
 Conventions (architecture doc §4):
 - Money is `Decimal` (never float) — matches the NUMERIC(12,2) columns.
 - Responses are plain Pydantic models, no hand-rolled {status, data} envelope.
@@ -28,7 +43,11 @@ T = TypeVar("T")
 
 
 class Page(BaseModel, Generic[T]):
-    """Standard paginated envelope (architecture doc §4.4)."""
+    """Standard paginated envelope (architecture doc §4.4).
+
+    Generic so every list endpoint returns a typed page (e.g.
+    Page[PayslipSummaryItem]). Every list endpoint in the module uses it:
+    salary rules/structures, payruns, payslips, /payslips/me."""
 
     items: list[T]
     total: int
@@ -39,9 +58,23 @@ class Page(BaseModel, Generic[T]):
 # ---------------------------------------------------------------------------
 # Salary Rules
 # ---------------------------------------------------------------------------
+# One configurable atomic line of pay: fixed amount | % of another code |
+# restricted formula. salary_rules is the GLOBAL rule library; whether a rule
+# participates in a structure (and in what order) is decided by the
+# salary_structure_rules junction in the next section.
 
 
 class SalaryRuleBase(BaseModel):
+    """Shared fields of a salary rule. One rule = one atomic computation line:
+    it computes EITHER a fixed amount, OR a percentage of another rule's
+    computed value (percentage_base_code), OR a restricted formula over
+    previously-computed codes. Which of the three is enforced by
+    computation_method + the model_validators below (and again by a DB CHECK
+    constraint on salary_rules in Eldo's schema).
+
+    code format is UPPER_SNAKE ([A-Z][A-Z0-9_]*) — matches the seeded
+    conventions (BASIC, HRA, PF_DEDUCTION) and is what formulas reference."""
+
     code: str = Field(
         pattern=r"^[A-Z][A-Z0-9_]*$",
         max_length=30,
@@ -77,6 +110,10 @@ class SalaryRuleCreate(SalaryRuleBase):
 class SalaryRuleUpdate(BaseModel):
     """PATCH semantics — all optional. Method consistency is enforced against
     the merged row in the service layer (we can't see the existing row here)."""
+    # Unlike Create, we CANNOT fully validate here: a partial PATCH might only
+    # rename the rule. So the validator runs only when the caller actually
+    # sets computation_method, and service.update_salary_rule re-checks the
+    # MERGED row against _validate_rule_consistency before committing.
 
     code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]*$", max_length=30)
     name: str | None = Field(default=None, min_length=1, max_length=100)
@@ -139,6 +176,9 @@ def _validate_method_fields(rule: BaseModel) -> None:
 
 
 class SalaryRuleRead(SalaryRuleBase):
+    """Read response for a salary rule; from_attributes=True lets the service
+    pass an ORM SalaryRule straight into model_validate()."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -149,6 +189,9 @@ class SalaryRuleRead(SalaryRuleBase):
 # ---------------------------------------------------------------------------
 # Salary Structures
 # ---------------------------------------------------------------------------
+# A named ORDERED chain of salary rules (via SalaryStructureRuleWrite +
+# SalaryStructureRulesReplace). GET /salary-structures/{id} returns the nested
+# ordered list; PUT .../rules replaces it atomically.
 
 
 class SalaryStructureCreate(BaseModel):
@@ -166,7 +209,10 @@ class SalaryStructureUpdate(BaseModel):
 
 
 class SalaryStructureRuleWrite(BaseModel):
-    """One entry of the ordered rule list (PUT /salary-structures/{id}/rules)."""
+    """One entry of the ordered rule list (PUT /salary-structures/{id}/rules).
+
+    `sequence` is what makes a structure ORDERED — the engine executes rules
+    in ascending sequence order and later rules can reference earlier ones."""
 
     salary_rule_id: int
     sequence: int = Field(ge=0, le=32767)
@@ -187,6 +233,9 @@ class SalaryStructureRuleRead(BaseModel):
 
 
 class SalaryStructureRead(BaseModel):
+    """Structure detail: nested `rules: [{sequence, rule: {...}}]` ordered by
+    sequence — exactly the order the engine executes them in."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -219,6 +268,10 @@ class PayrunScope(BaseModel):
 
     The frontend carries this forward to Step 2 (stateless wizard), so no
     orphaned draft rows are ever created server-side.
+
+    Fields: which salary structure + which period + optional department /
+    employee-type filters. Same object is re-sent in PayrunCreate (Step 2)
+    so the server can re-validate the scope on creation (anti-tampering).
     """
 
     salary_structure_id: int
@@ -259,14 +312,17 @@ class DraftScopeResponse(BaseModel):
 
 
 class PayrunCreate(BaseModel):
-    """Wizard Step 2 — scope (echoed from Step 1) + explicit employee_ids."""
+    """Wizard Step 2 — scope (echoed from Step 1) + explicit employee_ids.
+    The service re-validates every id against the scope filters before
+    creating the Payrun row (defense against a tampered frontend)."""
 
     scope: PayrunScope
     employee_ids: list[int] = Field(min_length=1, description="At least one employee is required.")
 
 
 class PayslipSummary(BaseModel):
-    """Per-payslip summary embedded in GET /payruns/{id}."""
+    """Per-payslip summary embedded in GET /payruns/{id}.
+    warning_count EXCLUDES internal SENT_AT sentinels (service filters them)."""
 
     id: int
     employee_id: int
@@ -318,6 +374,10 @@ class ComputeSkippedItem(BaseModel):
 
 
 class ComputeResult(BaseModel):
+    """POST /payruns/{id}/compute response: how many payslips were (re)computed,
+    which were skipped because they were already validated/paid (never touch
+    finalized history), and how many warnings were added overall."""
+
     payrun_id: int
     status: PayrunStatus
     payslips_computed: int
@@ -326,6 +386,10 @@ class ComputeResult(BaseModel):
 
 
 class ValidateResult(BaseModel):
+    """POST /payruns/{id}/validate response. When validation is REFUSED the
+    endpoint raises 409 with the blocking-warning list in the error; this DTO
+    carries the happy-path counts."""
+
     payrun_id: int
     status: PayrunStatus
     validated_payslips: int
@@ -375,7 +439,8 @@ class PayslipWarningRead(BaseModel):
 
 
 class PayslipSummaryItem(BaseModel):
-    """List row for GET /payslips."""
+    """List row for GET /payslips. Same shape reused by GET /payslips/me
+    (service.list_payslips filters by employee_id for the current user)."""
 
     id: int
     payrun_id: int
@@ -390,6 +455,12 @@ class PayslipSummaryItem(BaseModel):
 
 
 class PayslipRead(BaseModel):
+    """Full payslip: the computed breakdown the UI shows on detail screens
+    and the payslip PDF draws from. Nests the ordered lines (snapshots of
+    the salary rules at compute time) and warnings. contract_id is nullable
+    because an employee with no applicable contract still gets a zero-value
+    payslip carrying a missing_contract warning."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -413,6 +484,8 @@ class PayslipRead(BaseModel):
 # ---------------------------------------------------------------------------
 # Payslip PDF + bulk email
 # ---------------------------------------------------------------------------
+# Per-recipient results (never all-or-nothing): every send/skip/failure is
+# reported for one employee so one bad address can't mask the others.
 
 
 class SendPayslipResultItem(BaseModel):
@@ -432,9 +505,16 @@ class SendPayslipsResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Dashboard — plain aggregate DTOs (NOT ORM-backed)
 # ---------------------------------------------------------------------------
+# These exist to type the read-only aggregation queries in service.py for the
+# six /api/v1/dashboard endpoints. They are hand-built by the service layer
+# (no ConfigDict(from_attributes=True)) because there is no single ORM row
+# behind them.
 
 
 class KpisResponse(BaseModel):
+    """Dashboard KPI cards. Plain aggregate DTO — NOT ORM-backed (dashboard
+    schemas are deliberately plain per the module docstring)."""
+
     total_net_salary_paid: Decimal
     payslips_generated: int
     average_salary: Decimal
@@ -449,6 +529,9 @@ class SalaryByDepartmentItem(BaseModel):
 
 
 class MonthlyTrendItem(BaseModel):
+    """One point of the monthly line chart. month is ISO "YYYY-MM"; months
+    with no paid payslips still appear with total 0 (charts need no gaps)."""
+
     month: str  # ISO "YYYY-MM"
     total_net_salary: Decimal
 
@@ -481,5 +564,9 @@ class PayrollAlertItem(BaseModel):
 
 
 class PayrollAlertsResponse(BaseModel):
+    """Dashboard 'payroll alerts' payload: warnings grouped by type with
+    counts + payslip ids to drill into, plus how many draft/computed payslips
+    are currently carrying at least one open warning."""
+
     alerts: list[PayrollAlertItem] = Field(default_factory=list)
     total_open_payslips: int
