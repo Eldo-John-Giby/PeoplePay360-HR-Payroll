@@ -17,6 +17,7 @@ from app.schemas.auth import (
     UserCreate,
     UserOut,
     UserRoleUpdate,
+    UserUpdate,
 )
 
 from . import service
@@ -85,3 +86,15 @@ def update_user_roles(
     db: Session = Depends(get_db),
 ) -> User:
     return service.replace_user_roles(db, user_id, payload, current_user)
+
+
+@router.patch("/users/{user_id}", response_model=UserOut)
+def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    current_user: User = Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+) -> User:
+    """Link/unlink an employee or toggle is_active on an existing account
+    (how an unlinked EMPLOYEE account gets fixed after creation)."""
+    return service.update_user_account(db, user_id, payload, current_user)

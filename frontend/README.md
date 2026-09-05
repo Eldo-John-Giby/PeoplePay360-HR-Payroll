@@ -37,7 +37,8 @@ npm run build                          # typecheck + production bundle
 | Login + role-based nav | all | `POST /auth/login`, `GET /auth/me` |
 | Attendance — check-in/out + month summary | EMPLOYEE | `/attendance/me`, `/attendance/check-in`, `/attendance/{id}/check-out`, `/attendance/{id}/summary` |
 | Attendance — list/filters (status/date/manual/id), manual entry, per-row correction, EOD sweep | HR | `/attendance`, `/attendance/sweep-missing-checkouts` |
-| Employee directory + per-employee cross-links | HR | Ameen's `/employees` (graceful empty state until it lands) |
+| Employee directory + per-employee cross-links | HR | Ameen's `/employees` |
+| Create Account (provision a login, link employee) | ADMIN | `POST /auth/users` (no public self-signup — HR issues credentials) |
 | Time off requests — create, approve/refuse/cancel | all / HR | `/time-off/requests` + actions |
 | Balances | EMPLOYEE `/me`, HR filtered | `/time-off/balances` |
 | Time off types — config + create/deactivate | HR writes, all read | `/time-off/types` |

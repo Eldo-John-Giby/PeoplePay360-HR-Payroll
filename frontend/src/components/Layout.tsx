@@ -31,7 +31,7 @@ function NavItem({
 }
 
 export function Layout() {
-  const { user, logout, isHr } = useAuth();
+  const { user, logout, isHr, hasRole } = useAuth();
 
   return (
     <div className="app">
@@ -47,7 +47,14 @@ export function Layout() {
             <NavItem
               to="/employees"
               label="Employees"
-              title="Employee directory (wraps Ameen's API — lights up when his slice merges)"
+              title="Employee directory (wraps Ameen's API)"
+            />
+          )}
+          {hasRole("ADMIN") && (
+            <NavItem
+              to="/accounts"
+              label="Accounts"
+              title="Provision + manage login accounts (ADMIN only)"
             />
           )}
           <NavItem

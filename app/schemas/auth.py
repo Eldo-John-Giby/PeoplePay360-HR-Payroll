@@ -64,3 +64,15 @@ class UserCreate(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role_names: list[str] = Field(description="Full replacement set of role names.")
+
+
+class UserUpdate(BaseModel):
+    """PATCH /auth/users/{id} — partial update of an existing account (ADMIN).
+
+    - `employee_id` absent -> unchanged; `null` -> unlink; a value -> link to
+      that employee (one-account-per-employee still enforced, 409).
+    - `is_active` absent -> unchanged; a value -> enable/disable login.
+    """
+
+    employee_id: int | None = None
+    is_active: bool | None = None

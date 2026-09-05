@@ -244,6 +244,12 @@ select:focus {
   align-items: end;
 }
 
+.field small {
+  color: var(--muted, #666);
+  display: block;
+  margin-top: 4px;
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -328,6 +334,29 @@ select:focus {
 }
 
 /* Tables ------------------------------------------------------------------ */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.row-actions select {
+  max-width: 200px;
+}
+
+.row-alert {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
 
 .table {
   width: 100%;

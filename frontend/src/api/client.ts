@@ -16,6 +16,7 @@ import type {
   TimeOffType,
   TimeOffUnit,
   TokenResponse,
+  UserOut,
 } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api/v1";
@@ -114,6 +115,32 @@ export function login(email: string, password: string): Promise<TokenResponse> {
 
 export function fetchMe(): Promise<Me> {
   return request<Me>("GET", "/auth/me");
+}
+
+// ---------------------------------------------------------------------------
+// User management (ADMIN only — the backend has no public self-signup; HR/
+// admin provisions accounts, optionally linked to an existing employee).
+// ---------------------------------------------------------------------------
+
+export function fetchUsers(): Promise<UserOut[]> {
+  return request<UserOut[]>("GET", "/auth/users");
+}
+
+export function createUser(payload: {
+  email: string;
+  password: string;
+  role_names: string[];
+  employee_id?: number | null;
+  is_active?: boolean;
+}): Promise<UserOut> {
+  return request<UserOut>("POST", "/auth/users", payload);
+}
+
+export function updateUser(
+  userId: number,
+  payload: { employee_id?: number | null; is_active?: boolean },
+): Promise<UserOut> {
+  return request<UserOut>("PATCH", `/auth/users/${userId}`, payload);
 }
 
 // ---------------------------------------------------------------------------

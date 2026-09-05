@@ -28,6 +28,15 @@ export interface Me {
   employee: EmployeeRef | null;
 }
 
+export interface UserOut {
+  id: number;
+  email: string;
+  employee_id: number | null;
+  is_active: boolean;
+  roles: RoleRef[];
+  employee: EmployeeRef | null;
+}
+
 export interface Page<T> {
   items: T[];
   total: number;

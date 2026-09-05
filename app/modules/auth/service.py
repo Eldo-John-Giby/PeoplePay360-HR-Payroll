@@ -27,7 +27,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.auth import Role, User
-from app.schemas.auth import UserCreate, UserRoleUpdate
+from app.schemas.auth import UserCreate, UserRoleUpdate, UserUpdate
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +168,54 @@ def list_users(db: Session) -> list[User]:
             )
         ).all()
     )
+
+
+def update_user_account(
+    db: Session, user_id: int, payload: UserUpdate, actor: User
+) -> User:
+    """Link/unlink an employee and/or toggle is_active on an existing account
+    (ADMIN only — enforced in the router).
+
+    This is how "HR must link it" actually happens after creation: e.g. an
+    EMPLOYEE account created without an employee profile gets linked here and
+    attendance self-service starts working immediately.
+    """
+    target = get_user_or_404(db, user_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        return target
+
+    if "employee_id" in changes:
+        new_employee_id = changes["employee_id"]
+        if new_employee_id is None:
+            target.employee_id = None
+        else:
+            from app.models.employee import Employee
+
+            if db.get(Employee, new_employee_id) is None:
+                raise NotFoundException(
+                    f"Employee {new_employee_id} not found."
+                )
+            linked = db.scalar(
+                select(User).where(User.employee_id == new_employee_id)
+            )
+            if linked is not None and linked.id != target.id:
+                raise ConflictException(
+                    f"Employee {new_employee_id} already has a user account "
+                    f"(user id {linked.id}). One account per employee."
+                )
+            target.employee_id = new_employee_id
+
+    if "is_active" in changes:
+        if actor.id == target.id and changes["is_active"] is False:
+            raise ForbiddenException(
+                "You cannot disable your own account."
+            )
+        target.is_active = bool(changes["is_active"])
+
+    db.commit()
+    db.refresh(target)
+    return target
 
 
 def validate_password_strength(password: str) -> None:
