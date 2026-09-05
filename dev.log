@@ -1,0 +1,77 @@
+NOTICE:  database "peoplepay" does not exist, skipping
+PostgreSQL ready -> postgresql+psycopg2://peoplepay:peoplepay@127.0.0.1:60404/peoplepay
+Creating schema (create_all)...
+Schema + views ready.
+Seeding demo data...
+[seed] Seeding PeoplePay360 demo data...
+[seed] Done. 18 employees, 7 users, 15 payable. Demo logins (password 'Password@123'):
+        admin@oxp.com
+        divya.nair@oxp.com
+        priya.singh@oxp.com
+        neha.patel@oxp.com
+        john.dsouza@oxp.com
+        aarav.mehta@oxp.com
+        sara.khan@oxp.com
+
+API on http://localhost:8000  (docs: /docs)
+Demo login: divya.nair@oxp.com / Password@123
+
+INFO:     Started server process [21124]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60412 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56750 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56751 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56495 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61275 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58677 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57229 - "GET /api/v1/attendance?page_size=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53216 - "GET /api/v1/attendance?page_size=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58852 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58854 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55359 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64010 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58787 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51136 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60219 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51121 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60217 - "GET /api/v1/time-off/allocations?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65125 - "GET /api/v1/time-off/allocations?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52884 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62558 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64996 - "GET /api/v1/attendance?page_size=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61292 - "GET /api/v1/attendance?page_size=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52938 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52937 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56160 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63119 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65028 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61344 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61368 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51241 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61367 - "GET /api/v1/time-off/allocations?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53627 - "GET /api/v1/time-off/allocations?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63605 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59605 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52830 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52829 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64490 - "GET /api/v1/time-off/types?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51382 - "GET /api/v1/time-off/requests?page_size=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61278 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59856 - "GET /api/v1/time-off/balances HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54019 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59081 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59082 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59083 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59084 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59085 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59086 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59087 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59088 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59089 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59090 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59091 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59092 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59093 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59094 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
