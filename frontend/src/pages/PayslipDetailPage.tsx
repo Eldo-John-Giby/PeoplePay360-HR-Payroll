@@ -1,13 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+// Payslip detail — full breakdown (lines + warnings) for payroll roles.
+// EMPLOYEE self-service cannot read the detail endpoint (backend RBAC), so
+// the page offers their PDF directly when they own the payslip.
+
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ApiError, getPayslip } from "../api/client";
-import type { PayslipDetail, SalaryRuleCategory } from "../api/types";
-import { fmtDate, useAuth } from "../auth";
-import { fmtMoney } from "./ContractsPage";
+import {
+  ApiError,
+  downloadPayslipPdf,
+  getPayslip,
+} from "../api/client";
+// PayslipDetail is the committed API name for the full payslip breakdown.
+import type { PayslipDetail as Payslip } from "../api/types";
+import { fmtDate, fmtMoney, useAuth } from "../auth";
+import { PayrunStatusBadge } from "./PayrunsPage";
 
-const CATEGORY_LABEL: Record<SalaryRuleCategory, string> = {
-  basic: "Basic",
+const CATEGORY_LABEL: Record<string, string> = {
+  basic: "Earning",
   allowance: "Allowance",
   deduction: "Deduction",
   gross: "Gross",
@@ -15,173 +24,166 @@ const CATEGORY_LABEL: Record<SalaryRuleCategory, string> = {
   net: "Net",
 };
 
-const STATUS_LABEL = {
-  draft: "Draft",
-  computed: "Computed",
-  validated: "Validated",
-  paid: "Paid",
-  cancelled: "Cancelled",
-} as const;
-
 export function PayslipDetailPage() {
-  const { id } = useParams();
-  const payslipId = Number(id);
-  const { user } = useAuth();
-  const [slip, setSlip] = useState<PayslipDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { id: paramId, payslipId } = useParams();
+  const id = Number(paramId ?? payslipId);
+  const { hasRole } = useAuth();
+  const isPayroll = hasRole("HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN");
+
+  const [slip, setSlip] = useState<Payslip | null>(null);
+  const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
-    setError(null);
+    if (!Number.isFinite(id) || !isPayroll) return;
+    setError("");
     try {
-      setSlip(await getPayslip(payslipId));
+      setSlip(await getPayslip(id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load payslip.");
+      setError(err instanceof ApiError ? err.message : String(err));
     }
-  }, [payslipId]);
+  }, [id, isPayroll]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const { grossLines, netLines } = useMemo(() => {
-    if (!slip) return { grossLines: [], netLines: [] };
-    const lines = [...slip.lines].sort((a, b) => a.sequence - b.sequence);
-    const gross = lines.filter(
-      (l) => l.category === "basic" || l.category === "allowance" || l.category === "gross" || l.category === "contribution",
-    );
-    const net = lines.filter((l) => l.category === "deduction" || l.category === "net");
-    return { grossLines: gross, netLines: net };
-  }, [slip]);
-
-  if (error) {
-    return (
-      <div className="stack">
-        <h2>Payslip</h2>
-        <div className="alert alert-error">{error}</div>
-        <Link className="btn btn-ghost btn-sm" to="/payroll/payslips">← Back</Link>
-      </div>
-    );
+  async function onPdf() {
+    setDownloading(true);
+    setError("");
+    try {
+      await downloadPayslipPdf(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
   }
 
-  if (!slip) {
+  if (!isPayroll) {
     return (
-      <div className="stack">
-        <h2>Payslip</h2>
-        <div className="muted">Loading…</div>
-      </div>
-    );
-  }
-
-  const isOwner = user?.employee_id === slip.employee_id;
-
-  return (
-    <div className="stack">
-      <div className="row spread">
-        <h2>Payslip - {slip.employee_name}</h2>
-        <div className="row">
-          <button className="btn btn-ghost" onClick={() => window.print()}>
-            🖨 Print payslip
+      <div>
+        <h2>Payslip #{id}</h2>
+        <div className="card" style={{ padding: 16 }}>
+          <p>
+            Payslip details are available to payroll staff. As an employee you
+            can download your own payslip PDF — the backend checks ownership.
+          </p>
+          <button className="btn btn-primary" disabled={downloading} onClick={() => void onPdf()}>
+            {downloading ? "Downloading…" : "Download PDF"}
           </button>
-          <Link className="btn btn-ghost btn-sm" to="/payroll/payslips">
-            ← All payslips
-          </Link>
+          {error ? <div className="alert alert-error">{error}</div> : null}
+          <p className="small muted" style={{ marginTop: 12 }}>
+            <Link to="/payroll/payslips">← Back to my payslips</Link>
+          </p>
         </div>
       </div>
-      {error && <div className="alert alert-error">{error}</div>}
+    );
+  }
 
-      <div className="payslip-print">
-        <div className="card">
-          <div className="row spread" style={{ marginBottom: 14 }}>
-            <div>
-              <b style={{ fontSize: 18 }}>PeoplePay360</b>
-              <div className="small muted">Salary payslip · {slip.employee_name}</div>
-            </div>
-            <span className={`badge ${slip.status === "paid" ? "badge-ok" : "badge-muted"}`}>
-              {STATUS_LABEL[slip.status]}
-            </span>
+  return (
+    <div>
+      <div className="row spread">
+        <h2>
+          <Link to="/payroll/payslips" className="muted" style={{ fontSize: 14 }}>
+            ← Payslips
+          </Link>{" "}
+          Payslip #{id}
+        </h2>
+        {slip && <PayrunStatusBadge status={slip.status} />}
+      </div>
+
+      {error ? <div className="alert alert-error">{error}</div> : null}
+
+      {!slip ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <>
+          <div className="kv" style={{ marginTop: 14 }}>
+            <dt>Employee</dt>
+            <dd>{slip.employee_name}</dd>
+            <dt>Period</dt>
+            <dd>
+              {fmtDate(slip.period_start)} → {fmtDate(slip.period_end)}
+            </dd>
+            <dt>Worked days</dt>
+            <dd>{slip.worked_days}</dd>
+            <dt>Payrun</dt>
+            <dd>
+              <Link to={`/payroll/payruns/${slip.payrun_id}`}>
+                Payrun #{slip.payrun_id}
+              </Link>
+            </dd>
+            <dt>Net salary</dt>
+            <dd>
+              <b style={{ fontSize: 16 }}>{fmtMoney(slip.net_salary)}</b>
+            </dd>
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-            <div>
-              <div className="small muted">Employee</div>
-              <b>{slip.employee_name}</b>
-            </div>
-            <div>
-              <div className="small muted">Period</div>
-              <b>{fmtDate(slip.period_start)} → {fmtDate(slip.period_end)}</b>
-            </div>
-            <div>
-              <div className="small muted">Worked days</div>
-              <b>{fmtMoney(slip.worked_days)}</b>
-            </div>
-            <div>
-              <div className="small muted">Payrun</div>
-              <b>#{slip.payrun_id}</b>
-            </div>
+          <div className="row-actions" style={{ margin: "12px 0" }}>
+            <button className="btn btn-primary" disabled={downloading} onClick={() => void onPdf()}>
+              {downloading ? "Downloading…" : "Download PDF"}
+            </button>
           </div>
 
-          <h3 style={{ margin: "20px 0 8px", fontSize: 14 }}>Salary computation</h3>
-          <table className="table">
+          <h3>Breakdown ({slip.lines.length} lines)</h3>
+          <table className="table" style={{ marginTop: 6 }}>
             <thead>
               <tr>
-                <th>Rule</th>
-                <th>Category</th>
+                <th>#</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
                 <th style={{ textAlign: "right" }}>Amount</th>
               </tr>
             </thead>
             <tbody>
-              {grossLines.map((l) => (
+              {slip.lines.map((l) => (
                 <tr key={l.id}>
-                  <td><b>{l.name}</b><div className="small muted">{l.code}</div></td>
+                  <td className="muted">{l.sequence}</td>
                   <td>
-                    <span className={`badge badge-cat-${l.category}`}>
-                      {CATEGORY_LABEL[l.category]}
+                    <b>{l.code}</b>
+                  </td>
+                  <td>{l.name}</td>
+                  <td>
+                    <span className={`badge badge-${l.category}`}>
+                      {CATEGORY_LABEL[l.category] ?? l.category}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>{fmtMoney(l.amount)}</td>
                 </tr>
               ))}
+            </tbody>
+            <tfoot>
               <tr>
-                <td colSpan={2}><b>Gross salary</b></td>
-                <td style={{ textAlign: "right" }}><b>{fmtMoney(slip.gross_salary)}</b></td>
-              </tr>
-              {netLines.map((l) => (
-                <tr key={l.id}>
-                  <td>{l.name}<div className="small muted">{l.code}</div></td>
-                  <td>
-                    <span className={`badge badge-cat-${l.category}`}>
-                      {CATEGORY_LABEL[l.category]}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>{fmtMoney(l.amount)}</td>
-                </tr>
-              ))}
-              <tr>
-                <td colSpan={2}><b>Net salary</b></td>
+                <td colSpan={4}>
+                  <b>Gross / Net</b>
+                </td>
                 <td style={{ textAlign: "right" }}>
-                  <b style={{ fontSize: 16 }}>{fmtMoney(slip.net_salary)}</b>
+                  {fmtMoney(slip.gross_salary)} /{" "}
+                  <b>{fmtMoney(slip.net_salary)}</b>
                 </td>
               </tr>
-            </tbody>
+            </tfoot>
           </table>
 
           {slip.warnings.length > 0 && (
-            <div className="warn-panel" style={{ marginTop: 14 }}>
-              <h4 style={{ fontSize: 13, margin: "0 0 6px" }}>⚠ Warnings</h4>
-              <ul className="warn-list">
+            <>
+              <h3>Warnings ({slip.warnings.length})</h3>
+              <ul className="stack">
                 {slip.warnings.map((w) => (
-                  <li key={w.id}>{w.message}</li>
+                  <li key={w.id} className={`alert alert-${w.warning_type === "missing_contract" || w.warning_type === "negative_net" ? "error" : "ok"}`}>
+                    <span className={`badge badge-warn-${w.warning_type}`}>
+                      {w.warning_type.replaceAll("_", " ")}
+                    </span>{" "}
+                    {w.message}
+                  </li>
                 ))}
               </ul>
-            </div>
+            </>
           )}
-
-          <p className="muted small" style={{ marginTop: 16 }}>
-            Generated {fmtDate(slip.created_at)} · Payslip #{slip.id} ·{" "}
-            {isOwner ? "you are the payslip owner" : "viewed by payroll role"}
-          </p>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

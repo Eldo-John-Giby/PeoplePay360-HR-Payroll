@@ -1,347 +1,266 @@
+// Salary structures — a named, ORDERED chain of salary rules that fully
+// defines how pay is computed. Reads open to payroll roles; writes
+// (create / toggle / replace the rule chain) are HR_PAYROLL_MANAGER/ADMIN
+// only. The chain editor replaces the whole ordered list atomically via
+// PUT /salary-structures/{id}/rules — the engine executes rules in
+// ascending sequence order, so later rules may reference earlier ones.
+
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   ApiError,
   createSalaryStructure,
+  deleteSalaryStructure,
   getSalaryStructure,
-  listContracts,
   listSalaryRules,
   listSalaryStructures,
   replaceSalaryStructureRules,
   updateSalaryStructure,
 } from "../api/client";
 import type {
-  Contract,
   SalaryRule,
+  SalaryStructure,
   SalaryStructureSummary,
 } from "../api/types";
 import { useAuth } from "../auth";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  basic: "Basic",
-  allowance: "Allowance",
-  deduction: "Deduction",
-  gross: "Gross",
-  contribution: "Contribution",
-  net: "Net",
-};
 
 export function SalaryStructuresPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole("HR_PAYROLL_MANAGER", "ADMIN");
 
-  const [rows, setRows] = useState<SalaryStructureSummary[]>([]);
-  const [allRules, setAllRules] = useState<SalaryRule[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  // Editor state
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [structures, setStructures] = useState<SalaryStructureSummary[]>([]);
+  const [library, setLibrary] = useState<SalaryRule[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<SalaryStructure | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [included, setIncluded] = useState<SalaryRule[]>([]);
-  const [toAdd, setToAdd] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
+  const loadStructures = useCallback(async () => {
     try {
-      const [structPage, rulesPage, contractsPage] = await Promise.all([
-        listSalaryStructures(),
-        listSalaryRules(),
-        listContracts({ page_size: 100 } as never),
-      ]);
-      setRows(structPage.items);
-      setAllRules(rulesPage.items);
-      setContracts(contractsPage.items);
+      const page = await listSalaryStructures();
+      setStructures(page.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load structures.");
+      setError(err instanceof ApiError ? err.message : String(err));
     }
   }, []);
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const [, rules] = await Promise.all([loadStructures(), listSalaryRules()]);
+      setLibrary(rules.items.filter((r) => r.is_active));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }, [loadStructures]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  /** # employees using each structure (distinct, from contract assignments). */
-  const usageCount = useMemo(() => {
-    const counts = new Map<number, Set<number>>();
-    for (const c of contracts) {
-      if (!c.salary_structure) continue;
-      const set = counts.get(c.salary_structure.id) ?? new Set<number>();
-      if (c.employee) set.add(c.employee.id);
-      counts.set(c.salary_structure.id, set);
+  // Load the detail (ordered rule chain) whenever a structure is opened.
+  useEffect(() => {
+    if (selectedId === null) {
+      setDetail(null);
+      return;
     }
-    const out = new Map<number, number>();
-    for (const [id, set] of counts) out.set(id, set.size);
-    return out;
-  }, [contracts]);
-
-  function startNew() {
-    setEditingId(null);
-    setName("");
-    setCode("");
-    setIsActive(true);
-    setIncluded([]);
-    setToAdd("");
-    setNotice(null);
-    setError(null);
-  }
-
-  async function startEdit(id: number) {
-    setError(null);
-    setNotice(null);
-    setLoadingDetail(true);
-    try {
-      const d = await getSalaryStructure(id);
-      setEditingId(id);
-      setName(d.name);
-      setCode(d.code);
-      setIsActive(d.is_active);
-      setIncluded(
-        [...d.rules]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((r) => r.rule),
+    setError("");
+    getSalaryStructure(selectedId)
+      .then(setDetail)
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : String(err)),
       );
-      setToAdd("");
+  }, [selectedId]);
+
+  const activeDetail = detail?.is_active ?? false;
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const created = await createSalaryStructure({
+        name,
+        code: code.toUpperCase(),
+      });
+      setNotice(`Structure ${created.code} created — add rules to its chain below.`);
+      setName("");
+      setCode("");
+      await loadStructures();
+      setSelectedId(created.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load structure.");
+      setError(err instanceof ApiError ? err.message : String(err));
     } finally {
-      setLoadingDetail(false);
+      setSaving(false);
     }
   }
 
-  const availableRules = useMemo(
-    () => allRules.filter((r) => r.is_active && !included.some((i) => i.id === r.id)),
-    [allRules, included],
-  );
-
-  function addRule() {
-    if (!toAdd) return;
-    const rule = allRules.find((r) => r.id === Number(toAdd));
-    if (rule) setIncluded((prev) => [...prev, rule]);
-    setToAdd("");
+  async function onToggleActive(s: SalaryStructureSummary) {
+    setBusyId(s.id);
+    setError("");
+    try {
+      await updateSalaryStructure(s.id, { is_active: !s.is_active });
+      if (selectedId === s.id) setDetail(null);
+      await loadStructures();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  function removeRule(id: number) {
-    setIncluded((prev) => prev.filter((r) => r.id !== id));
+  const [deletingStructureId, setDeletingStructureId] = useState<number | null>(null);
+
+  async function onDeleteStructure(s: SalaryStructureSummary) {
+    setDeletingStructureId(s.id);
+    setError("");
+    try {
+      await deleteSalaryStructure(s.id);
+      if (selectedId === s.id) setDetail(null);
+      await loadStructures();
+      setNotice(`Structure ${s.code} deactivated.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDeletingStructureId(null);
+    }
   }
 
-  function moveRule(index: number, dir: -1 | 1) {
-    setIncluded((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
+  // --- ordered chain editor (operates on a local copy until Save) ----------
+
+  function openEditor(item: SalaryStructureSummary) {
+    setError("");
+    setNotice("");
+    setSelectedId(item.id === selectedId ? null : item.id);
+  }
+
+  const chain = useMemo(() => detail?.rules ?? [], [detail]);
+
+  const addableRules = useMemo(() => {
+    const inChain = new Set(chain.map((r) => r.rule.id));
+    return library.filter((r) => !inChain.has(r.id));
+  }, [chain, library]);
+
+  function move(idx: number, dir: -1 | 1) {
+    if (!detail) return;
+    const next = [...chain];
+    const j = idx + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setDetail({ ...detail, rules: next });
+  }
+
+  function removeAt(idx: number) {
+    if (!detail) return;
+    setDetail({
+      ...detail,
+      rules: chain.filter((_, i) => i !== idx),
     });
   }
 
-  async function toggleActive(s: SalaryStructureSummary) {
-    setError(null);
-    setNotice(null);
-    try {
-      await updateSalaryStructure(s.id, { is_active: !s.is_active });
-      setNotice(`Structure "${s.name}" ${s.is_active ? "deactivated" : "activated"}.`);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to toggle structure.");
-    }
+  function appendRule(ruleId: number) {
+    if (!detail) return;
+    const rule = library.find((r) => r.id === ruleId);
+    if (!rule) return;
+    setDetail({
+      ...detail,
+      rules: [...chain, { sequence: (chain.length + 1) * 10, rule }],
+    });
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    if (!name.trim() || !code.trim()) {
-      setError("Name and code are required.");
-      return;
-    }
-    if (included.length === 0) {
-      setError("Add at least one salary rule (sequence matters for computation order).");
-      return;
-    }
-    setBusy(true);
+  async function onSaveChain() {
+    if (!detail) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
-      if (editingId) {
-        await updateSalaryStructure(editingId, { name: name.trim(), code: code.trim(), is_active: isActive });
-        await replaceSalaryStructureRules(
-          editingId,
-          included.map((r, i) => ({ salary_rule_id: r.id, sequence: (i + 1) * 10 })),
-        );
-        setNotice("Structure updated (rules re-sequenced).");
-      } else {
-        const created = await createSalaryStructure({ name: name.trim(), code: code.trim(), is_active: isActive });
-        await replaceSalaryStructureRules(
-          created.id,
-          included.map((r, i) => ({ salary_rule_id: r.id, sequence: (i + 1) * 10 })),
-        );
-        setNotice("Structure created with rules in order.");
-      }
-      startNew();
-      await load();
+      // Renumber by position so ascending order == visual order.
+      const updated = await replaceSalaryStructureRules(
+        detail.id,
+        chain.map((r, i) => ({ salary_rule_id: r.rule.id, sequence: (i + 1) * 10 })),
+      );
+      setDetail(updated);
+      setNotice("Rule chain saved — execution order is the order shown.");
+      await loadStructures();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save structure.");
+      setError(err instanceof ApiError ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   return (
-    <div className="stack">
-      <div className="row spread">
-        <h2>Salary structures</h2>
-        {canWrite && (
-          <button className="btn btn-ghost btn-sm" onClick={startNew} disabled={busy}>
-            ＋ New structure
-          </button>
-        )}
-      </div>
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+    <div>
+      <h2>Salary structures</h2>
+      <p className="small muted">
+        A structure is an ordered chain of salary rules — the engine runs them
+        in ascending sequence order and later rules can reference earlier ones.
+        A payrun is scoped to one structure; contracts reference structures too.
+      </p>
+
+      {error ? <div className="alert alert-error">{error}</div> : null}
+      {notice ? <div className="alert alert-ok">{notice}</div> : null}
 
       {canWrite && (
-        <div className="card">
-          <h3>{editingId ? `Edit structure #${editingId}` : "New structure"}</h3>
-          <form className="grid" onSubmit={onSubmit} style={{ marginBottom: 14 }}>
+        <div className="card" style={{ padding: 16, marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>New structure</h3>
+          <form className="row" onSubmit={onCreate} style={{ alignItems: "flex-end" }}>
             <label className="field">
               <span>Name</span>
               <input
-                type="text"
                 required
+                placeholder="Default monthly structure"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Regular Salary"
               />
             </label>
             <label className="field">
-              <span>Code</span>
+              <span>Code (UPPER_SNAKE)</span>
               <input
-                type="text"
                 required
+                pattern="[A-Z][A-Z0-9_]*"
+                placeholder="DEFAULT_MONTHLY"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. REGULAR"
               />
             </label>
-            <label className="check" style={{ alignSelf: "end", paddingBottom: 10 }}>
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-              />
-              Active
-            </label>
+            <button className="btn btn-primary" disabled={saving}>
+              {saving ? "Creating…" : "Create shell"}
+            </button>
           </form>
-
-          <h3 style={{ fontSize: 13 }}>Salary rules (in computation order)</h3>
-          {included.length === 0 && (
-            <p className="muted small">No rules yet - add the first one below.</p>
-          )}
-          <table className="table" style={{ marginBottom: 10 }}>
-            <tbody>
-              {included.map((r, i) => (
-                <tr key={r.id}>
-                  <td style={{ width: 80 }} className="muted">
-                    #{String(i + 1).padStart(2, "0")}
-                  </td>
-                  <td>
-                    <b>{r.name}</b>
-                    <div className="small muted">{r.code}</div>
-                  </td>
-                  <td>
-                    <span className={`badge badge-cat-${r.category}`}>
-                      {CATEGORY_LABEL[r.category] ?? r.category}
-                    </span>
-                  </td>
-                  <td className="row-actions" style={{ justifyContent: "flex-end" }}>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      disabled={i === 0}
-                      onClick={() => moveRule(i, -1)}
-                      title="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      disabled={i === included.length - 1}
-                      onClick={() => moveRule(i, 1)}
-                      title="Move down"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      onClick={() => removeRule(r.id)}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="row">
-            <label className="field field-wide">
-              <span>Add a rule</span>
-              <select value={toAdd} onChange={(e) => setToAdd(e.target.value)}>
-                <option value="">Select…</option>
-                {availableRules.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.code})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="field align-end">
-              <button type="button" className="btn btn-ghost" onClick={addRule}>
-                Add rule
-              </button>
-            </div>
-          </div>
-
-          <div className="row spread" style={{ marginTop: 14 }}>
-            <p className="muted small">
-              Rules run top to bottom - Basic first, then allowances, Gross, Deductions, Net.
-            </p>
-            <div className="row">
-              <button className="btn btn-ghost" type="button" onClick={startNew}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" disabled={busy || loadingDetail}>
-                {busy ? "Saving…" : editingId ? "Save structure" : "Create structure"}
-              </button>
-            </div>
-          </div>
+          <p className="small muted" style={{ marginBottom: 0 }}>
+            Creates the shell with no rules yet — pick it below and add rules to
+            its chain.
+          </p>
         </div>
       )}
 
-      <table className="table">
+      <table className="table" style={{ marginTop: 12 }}>
         <thead>
           <tr>
-            <th>Name</th>
             <th>Code</th>
-            <th># Rules</th>
-            <th># Employees using</th>
+            <th>Name</th>
+            <th>Rules</th>
             <th>Status</th>
-            {canWrite && <th>Actions</th>}
+            <th />
           </tr>
         </thead>
         <tbody>
-          {rows.map((s) => (
-            <tr key={s.id}>
-              <td><b>{s.name}</b></td>
-              <td>{s.code}</td>
+          {structures.map((s) => (
+            <tr
+              key={s.id}
+              className={selectedId === s.id ? "row-selected" : undefined}
+            >
+              <td>
+                <b>{s.code}</b>
+              </td>
+              <td>{s.name}</td>
               <td>{s.rule_count}</td>
-              <td>{usageCount.get(s.id) ?? 0}</td>
               <td>
                 {s.is_active ? (
                   <span className="badge badge-ok">Active</span>
@@ -349,37 +268,160 @@ export function SalaryStructuresPage() {
                   <span className="badge badge-muted">Inactive</span>
                 )}
               </td>
-              {canWrite && (
-                <td className="row-actions">
+              <td className="row-actions" style={{ justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => openEditor(s)}>
+                  {selectedId === s.id ? "Close" : "Rules"}
+                </button>
+                {canWrite && (
                   <button
                     className="btn btn-ghost btn-sm"
-                    disabled={loadingDetail || busy}
-                    onClick={() => void startEdit(s.id)}
-                  >
-                    Edit rules
-                  </button>
-                  <button
-                    className={`btn btn-${s.is_active ? "warn" : "ok"} btn-sm`}
-                    disabled={busy}
-                    onClick={() => void toggleActive(s)}
+                    disabled={busyId === s.id}
+                    onClick={() => void onToggleActive(s)}
                   >
                     {s.is_active ? "Deactivate" : "Activate"}
                   </button>
-                </td>
-              )}
+                )}
+                {canWrite && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    disabled={busyId === s.id || deletingStructureId === s.id || !s.is_active}
+                    onClick={() => void onDeleteStructure(s)}
+                  >
+                    {deletingStructureId === s.id ? "Deleting…" : "Delete"}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={canWrite ? 6 : 5} className="muted">No structures yet.</td>
-            </tr>
-          )}
         </tbody>
       </table>
-      {!canWrite && (
-        <p className="muted small">
-          You have read-only access. Only HR_PAYROLL_MANAGER and ADMIN can edit structures.
-        </p>
+
+      {selectedId !== null && (
+        <div className="card" style={{ padding: 16, marginTop: 12 }}>
+          <div className="row spread">
+            <h3 style={{ margin: 0 }}>
+              {detail?.name ?? "Structure"}{" "}
+              <span className="muted small">
+                — execution order (top executes first)
+              </span>
+            </h3>
+          </div>
+
+          {!activeDetail && (
+            <div className="alert alert-error" style={{ margin: "10px 0" }}>
+              This structure is inactive — reactivate it before editing or using
+              it for a payrun.
+            </div>
+          )}
+
+          {chain.length === 0 ? (
+            <p className="muted">
+              No rules in this chain yet. Add rules below.
+            </p>
+          ) : (
+            <table className="table" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>#</th>
+                  <th>Rule</th>
+                  <th>Category</th>
+                  <th>Computes</th>
+                  <th style={{ width: 120 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {chain.map((item, i) => (
+                  <tr key={item.rule.id}>
+                    <td className="muted">{i + 1}</td>
+                    <td>
+                      <b>{item.rule.code}</b>{" "}
+                      <span className="muted">· {item.rule.name}</span>
+                    </td>
+                    <td>
+                      <span className={`badge badge-${item.rule.category}`}>
+                        {item.rule.category}
+                      </span>
+                    </td>
+                    <td className="small">
+                      {item.rule.computation_method === "fixed" && (
+                        <>Fixed {item.rule.amount}</>
+                      )}
+                      {item.rule.computation_method === "percentage" && (
+                        <>{item.rule.percentage}% of {item.rule.percentage_base_code}</>
+                      )}
+                      {item.rule.computation_method === "formula" && (
+                        <code>{item.rule.formula}</code>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={i === 0}
+                          onClick={() => move(i, -1)}
+                          title="Move earlier"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={i === chain.length - 1}
+                          onClick={() => move(i, 1)}
+                          title="Move later"
+                        >
+                          ↓
+                        </button>
+                        {canWrite && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => removeAt(i)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {canWrite && activeDetail && (
+            <div className="row" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>Add rule to chain</span>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    if (id) appendRule(id);
+                  }}
+                >
+                  <option value="">
+                    {addableRules.length
+                      ? "Choose a rule…"
+                      : "All library rules are in the chain"}
+                  </option>
+                  {addableRules.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.code} — {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {chain.length > 0 && (
+                <button
+                  className="btn btn-primary"
+                  disabled={saving}
+                  onClick={() => void onSaveChain()}
+                >
+                  {saving ? "Saving…" : "Save chain"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

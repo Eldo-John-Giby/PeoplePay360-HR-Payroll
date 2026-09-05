@@ -240,12 +240,11 @@ export function PayrollDashboardPage() {
     setLoading(true);
     setError("");
     try {
-      const [k, d, t, a, s, at, to] = await Promise.all([
+      const [k, d, t, a, at, to] = await Promise.all([
         getDashboardKpis(filters),
         getSalaryByDepartment(filters),
         getMonthlyTrend(months, filters),
         getPayrollAlerts(filters),
-        getPayslipStatus(filters),
         getAttendanceOverview(filters),
         getTimeOffOverview(filters),
       ]);
@@ -255,13 +254,19 @@ export function PayrollDashboardPage() {
       setAlerts(a.alerts);
       setOpenPayslips(a.total_open_payslips);
       setUnvalidated(a.unvalidated_payslips);
-      setStatus(s);
       setAtt(at);
       setToff(to);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+    // Payslip-status is fetched separately so a missing endpoint on an older
+    // server build never blanks the rest of the dashboard panels.
+    try {
+      setStatus(await getPayslipStatus(filters));
+    } catch {
+      /* non-fatal: the "Payslip status" panel shows "No payslips" */
     }
   }, [filters, months]);
 
@@ -492,247 +497,251 @@ export function PayrollDashboardPage() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Primary visualizations: Salary by Department + Monthly trend */}
+      {/* 2-Column Grid Layout: Panels side-by-side in card format            */}
       {/* ------------------------------------------------------------------ */}
-      <Panel
-        title="Net salary by department"
-        right={
-          <span className="muted small">
-            {fmtNum(dept.reduce((s, d) => s + d.headcount, 0))} employees · paid net
-          </span>
-        }
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))",
+          gap: 16,
+          alignItems: "start",
+        }}
       >
-        {dept.length === 0 ? (
-          <p className="muted">No paid payslips match the filters.</p>
-        ) : (
-          <div className="stack">
-            {dept.map((d) => (
-              <div key={d.department_name}>
-                <div className="row spread small">
-                  <span>
-                    <b>{d.department_name}</b>{" "}
-                    <span className="muted">({fmtNum(d.headcount)})</span>
-                  </span>
-                  <span>{fmtMoney(d.total_salary)}</span>
-                </div>
-                <div
-                  style={{
-                    background: "#eef0f4",
-                    borderRadius: 6,
-                    height: 10,
-                    marginTop: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${(Number(d.total_salary) / maxDept) * 100}%`,
-                      background: "#2563eb",
-                      borderRadius: 6,
-                      height: 10,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
-
-      <Panel
-        title="Monthly net salary (paid)"
-        right={<span className="muted small">draft/computed excluded</span>}
-      >
-        <TrendChart items={trend} />
-      </Panel>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Payslip Status & Payroll Alerts */}
-      {/* ------------------------------------------------------------------ */}
-      <Panel title="Payslip status">
-        {!status ? (
-          <p className="muted">No payslips match the filters.</p>
-        ) : (
-          <>
-            <div className="cards">
-              <StatCell label="Paid" value={fmtNum(status.paid)} tone="ok" />
-              <StatCell label="Validated" value={fmtNum(status.validated)} tone="ok" />
-              <StatCell label="Computed" value={fmtNum(status.computed)} tone="warn" />
-              <StatCell label="Draft" value={fmtNum(status.draft)} tone="muted" />
-              <StatCell label="With warnings" value={fmtNum(status.with_warnings)} tone="bad" />
-              <StatCell label="Not validated" value={fmtNum(status.unvalidated)} tone="warn" />
-            </div>
-            {status.paid + status.validated + status.computed + status.draft > 0 && (
-              <div
-                style={{
-                  background: "#eef0f4",
-                  borderRadius: 6,
-                  height: 8,
-                  marginTop: 12,
-                  display: "flex",
-                  overflow: "hidden",
-                }}
-              >
-                {[
-                  { label: "paid", v: status.paid, c: "#12805c" },
-                  { label: "validated", v: status.validated, c: "#67a68f" },
-                  { label: "computed", v: status.computed, c: "#e8943a" },
-                  { label: "draft", v: status.draft, c: "#9aa4b2" },
-                ].map((s) => {
-                  const total =
-                    status.paid + status.validated + status.computed + status.draft;
-                  return s.v > 0 ? (
+        {/* Left Column */}
+        <div>
+          <Panel
+            title="Net salary by department"
+            right={
+              <span className="muted small">
+                {fmtNum(dept.reduce((s, d) => s + d.headcount, 0))} employees · paid net
+              </span>
+            }
+          >
+            {dept.length === 0 ? (
+              <p className="muted">No paid payslips match the filters.</p>
+            ) : (
+              <div className="stack">
+                {dept.map((d) => (
+                  <div key={d.department_name}>
+                    <div className="row spread small">
+                      <span>
+                        <b>{d.department_name}</b>{" "}
+                        <span className="muted">({fmtNum(d.headcount)})</span>
+                      </span>
+                      <span>{fmtMoney(d.total_salary)}</span>
+                    </div>
                     <div
-                      key={s.label}
-                      title={`${s.label}: ${s.v}`}
-                      style={{ width: `${(s.v / total) * 100}%`, background: s.c }}
-                    />
-                  ) : null;
-                })}
+                      style={{
+                        background: "#eef0f4",
+                        borderRadius: 6,
+                        height: 10,
+                        marginTop: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${(Number(d.total_salary) / maxDept) * 100}%`,
+                          background: "#2563eb",
+                          borderRadius: 6,
+                          height: 10,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-          </>
-        )}
-      </Panel>
+          </Panel>
 
-      <Panel title="Payroll alerts">
-        {alerts.length === 0 && openPayslips === 0 && unvalidated === 0 ? (
-          <p className="muted">No open warnings — every payslip is clean.</p>
-        ) : (
-          <>
-            <p className="small muted" style={{ marginTop: 0 }}>
-              {openPayslips} open payslip(s) carry warnings · {fmtNum(unvalidated)}{" "}
-              payslip(s) are not yet validated. All rows are generated from
-              live payslip / warning records.
-            </p>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Alert</th>
-                  <th>Payslips</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {unvalidated > 0 && (
-                  <tr>
-                    <td>
-                      <span className="badge badge-warn">Unvalidated payslip</span>
-                    </td>
-                    <td>{fmtNum(unvalidated)}</td>
-                    <td />
-                  </tr>
+          <Panel title="Payslip status">
+            {!status ? (
+              <p className="muted">No payslips match the filters.</p>
+            ) : (
+              <>
+                <div className="cards">
+                  <StatCell label="Paid" value={fmtNum(status.paid)} tone="ok" />
+                  <StatCell label="Validated" value={fmtNum(status.validated)} tone="ok" />
+                  <StatCell label="Computed" value={fmtNum(status.computed)} tone="warn" />
+                  <StatCell label="Draft" value={fmtNum(status.draft)} tone="muted" />
+                  <StatCell label="With warnings" value={fmtNum(status.with_warnings)} tone="bad" />
+                  <StatCell label="Not validated" value={fmtNum(status.unvalidated)} tone="warn" />
+                </div>
+                {status.paid + status.validated + status.computed + status.draft > 0 && (
+                  <div
+                    style={{
+                      background: "#eef0f4",
+                      borderRadius: 6,
+                      height: 8,
+                      marginTop: 12,
+                      display: "flex",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {[
+                      { label: "paid", v: status.paid, c: "#12805c" },
+                      { label: "validated", v: status.validated, c: "#67a68f" },
+                      { label: "computed", v: status.computed, c: "#e8943a" },
+                      { label: "draft", v: status.draft, c: "#9aa4b2" },
+                    ].map((s) => {
+                      const total =
+                        status.paid + status.validated + status.computed + status.draft;
+                      return s.v > 0 ? (
+                        <div
+                          key={s.label}
+                          title={`${s.label}: ${s.v}`}
+                          style={{ width: `${(s.v / total) * 100}%`, background: s.c }}
+                        />
+                      ) : null;
+                    })}
+                  </div>
                 )}
-                {alerts.map((a) => (
-                  <tr key={a.warning_type}>
-                    <td>
-                      <span className={`badge badge-warn-${a.warning_type}`}>
-                        {WARNING_LABEL.get(a.warning_type) ??
-                          a.warning_type.replaceAll("_", " ")}
-                      </span>
-                    </td>
-                    <td>{fmtNum(a.count)}</td>
-                    <td className="small muted">
-                      {a.payslip_ids.length > 0
-                        ? a.payslip_ids.slice(0, 3).map((id, i) => (
-                            <span key={id}>
-                              {i > 0 ? ", " : ""}
-                              <Link to={`/payroll/payslips/${id}`}>#{id}</Link>
-                            </span>
-                          ))
-                        : ""}
-                      {a.payslip_ids.length > 3 ? ` +${a.payslip_ids.length - 3}` : ""}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
-      </Panel>
+              </>
+            )}
+          </Panel>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Attendance Overview */}
-      {/* ------------------------------------------------------------------ */}
-      <Panel
-        title="Attendance overview"
-        right={
-          <span className="muted small">
-            {att ? `coverage ${att.coverage_pct.toFixed(1)}%` : ""}
-          </span>
-        }
-      >
-        {!att ||
-        att.present + att.late + att.absent + att.overtime + att.missing_checkouts ===
-          0 ? (
-          <p className="muted">No attendance rows for the selected period.</p>
-        ) : (
-          <div className="cards">
-            <StatCell label="Present" value={fmtNum(att.present)} tone="ok" />
-            <StatCell label="Late" value={fmtNum(att.late)} tone="warn" />
-            <StatCell label="Absent (derived)" value={fmtNum(att.absent)} tone="bad" />
-            <StatCell label="Overtime" value={fmtNum(att.overtime)} />
-            <StatCell
-              label="Missing check-outs"
-              value={fmtNum(att.missing_checkouts)}
-              tone="warn"
-            />
-            <StatCell label="Manual edits" value={fmtNum(att.manual_edits)} tone="muted" />
-          </div>
-        )}
-      </Panel>
+          <Panel
+            title="Attendance overview"
+            right={
+              <span className="muted small">
+                {att ? `coverage ${att.coverage_pct.toFixed(1)}%` : ""}
+              </span>
+            }
+          >
+            {!att ||
+            att.present + att.late + att.absent + att.overtime + att.missing_checkouts ===
+              0 ? (
+              <p className="muted">No attendance rows for the selected period.</p>
+            ) : (
+              <div className="cards">
+                <StatCell label="Present" value={fmtNum(att.present)} tone="ok" />
+                <StatCell label="Late" value={fmtNum(att.late)} tone="warn" />
+                <StatCell label="Absent (derived)" value={fmtNum(att.absent)} tone="bad" />
+                <StatCell label="Overtime" value={fmtNum(att.overtime)} />
+                <StatCell
+                  label="Missing check-outs"
+                  value={fmtNum(att.missing_checkouts)}
+                  tone="warn"
+                />
+                <StatCell label="Manual edits" value={fmtNum(att.manual_edits)} tone="muted" />
+              </div>
+            )}
+          </Panel>
+        </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Time Off Overview (per type) */}
-      {/* ------------------------------------------------------------------ */}
-      <Panel
-        title="Time off overview"
-        hint="Approved days / pending requests respect the period filter; remaining balances are the live current balances of the filtered employees."
-        right={
-          <span className="muted small">
-            {fmtNum(Number(toff?.approved_days ?? 0))} approved ·{" "}
-            {fmtNum(toff?.pending_requests ?? 0)} pending
-          </span>
-        }
-      >
-        {!toff || toff.by_type.length === 0 ? (
-          <p className="muted">No time-off types with activity for the filters.</p>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Time off type</th>
-                <th>Approved days</th>
-                <th>Pending requests</th>
-                <th>Remaining balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {toff.by_type.map((t) => (
-                <tr key={t.time_off_type_name}>
-                  <td>
-                    <b>{t.time_off_type_name}</b>
-                  </td>
-                  <td>{fmtNum(Number(t.approved_days))}</td>
-                  <td>
-                    {t.pending_requests > 0 ? (
-                      <span className="badge badge-req-to_approve">
-                        {t.pending_requests}
-                      </span>
-                    ) : (
-                      <span className="muted">—</span>
+        {/* Right Column */}
+        <div>
+          <Panel
+            title="Monthly net salary (paid)"
+            right={<span className="muted small">draft/computed excluded</span>}
+          >
+            <TrendChart items={trend} />
+          </Panel>
+
+          <Panel title="Payroll alerts">
+            {alerts.length === 0 && openPayslips === 0 && unvalidated === 0 ? (
+              <p className="muted">No open warnings — every payslip is clean.</p>
+            ) : (
+              <>
+                <p className="small muted" style={{ marginTop: 0 }}>
+                  {openPayslips} open payslip(s) carry warnings · {fmtNum(unvalidated)}{" "}
+                  payslip(s) are not yet validated. All rows are generated from
+                  live payslip / warning records.
+                </p>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Alert</th>
+                      <th>Payslips</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unvalidated > 0 && (
+                      <tr>
+                        <td>
+                          <span className="badge badge-warn">Unvalidated payslip</span>
+                        </td>
+                        <td>{fmtNum(unvalidated)}</td>
+                        <td />
+                      </tr>
                     )}
-                  </td>
-                  <td>{fmtNum(Number(t.remaining))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Panel>
+                    {alerts.map((a) => (
+                      <tr key={a.warning_type}>
+                        <td>
+                          <span className={`badge badge-warn-${a.warning_type}`}>
+                            {WARNING_LABEL.get(a.warning_type) ??
+                              a.warning_type.replaceAll("_", " ")}
+                          </span>
+                        </td>
+                        <td>{fmtNum(a.count)}</td>
+                        <td className="small muted">
+                          {a.payslip_ids.length > 0
+                            ? a.payslip_ids.slice(0, 3).map((id, i) => (
+                                <span key={id}>
+                                  {i > 0 ? ", " : ""}
+                                  <Link to={`/payroll/payslips/${id}`}>#{id}</Link>
+                                </span>
+                              ))
+                            : ""}
+                          {a.payslip_ids.length > 3 ? ` +${a.payslip_ids.length - 3}` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </Panel>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Department Overview — dept / headcount / payroll cost */}
-      {/* ------------------------------------------------------------------ */}
+          <Panel
+            title="Time off overview"
+            hint="Approved days / pending requests respect the period filter; remaining balances are the live current balances of the filtered employees."
+            right={
+              <span className="muted small">
+                {fmtNum(Number(toff?.approved_days ?? 0))} approved ·{" "}
+                {fmtNum(toff?.pending_requests ?? 0)} pending
+              </span>
+            }
+          >
+            {!toff || toff.by_type.length === 0 ? (
+              <p className="muted">No time-off types with activity for the filters.</p>
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Time off type</th>
+                    <th>Approved days</th>
+                    <th>Pending requests</th>
+                    <th>Remaining balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {toff.by_type.map((t) => (
+                    <tr key={t.time_off_type_name}>
+                      <td>
+                        <b>{t.time_off_type_name}</b>
+                      </td>
+                      <td>{fmtNum(Number(t.approved_days))}</td>
+                      <td>
+                        {t.pending_requests > 0 ? (
+                          <span className="badge badge-req-to_approve">
+                            {t.pending_requests}
+                          </span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>{fmtNum(Number(t.remaining))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+        </div>
+      </div>
+
+      {/* Full-width Department Overview panel at the bottom */}
       <Panel title="Department overview">
         {dept.length === 0 ? (
           <p className="muted">No department payroll data for the filters.</p>

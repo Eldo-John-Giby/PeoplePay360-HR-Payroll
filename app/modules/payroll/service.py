@@ -88,14 +88,17 @@ from app.schemas.payroll import (
     CancelResult,
     ComputeResult,
     ComputeSkippedItem,
+    DashboardFilterOptionsResponse,
     DraftScopeResponse,
     EligibleEmployeeOut,
+    FilterOptionItem,
     KpisResponse,
     MarkPaidResult,
     MonthlyTrendItem,
     Page,
     PayrollAlertItem,
     PayrollAlertsResponse,
+    PayslipStatusOverview,
     PayrunCreate,
     PayrunRead,
     PayrunScope,
@@ -118,6 +121,7 @@ from app.schemas.payroll import (
     SendPayslipsResult,
     TimeOffBalanceItem,
     TimeOffOverview,
+    TimeOffTypeOverviewItem,
     ValidateResult,
 )
 from app.modules.payroll import pdf as pdf_mod
@@ -1452,15 +1456,21 @@ def send_payslips(db: Session, payrun_id: int) -> SendPayslipsResult:
 # nice-to-have in the prompt; revisit if the org chart grows).
 
 
-def _employee_scope_filter(stmt, department_id: int | None, employee_type: EmployeeType | None):
-    """Shared filter-building helper: department + employee_type compose.
-    One of the two helpers that let all six dashboard endpoints apply the same
-    filter semantics (department AND employee_type) — never copy-pasted per
-    endpoint (prompt §4: write ONE shared helper)."""
+def _employee_scope_filter(
+    stmt, department_id: int | None, employee_type: EmployeeType | None,
+    company_id: int | None = None,
+):
+    """Shared filter-building helper: department + employee_type + company
+    compose with AND semantics (never OR). One of the two helpers that let
+    every dashboard endpoint apply the same filters identically — never
+    copy-pasted per endpoint (prompt §4: write ONE shared helper).
+    Requires the statement to reference Employee (join or FROM)."""
     if department_id is not None:
         stmt = stmt.where(Employee.department_id == department_id)
     if employee_type is not None:
         stmt = stmt.where(Employee.employee_type == employee_type)
+    if company_id is not None:
+        stmt = stmt.where(Employee.company_id == company_id)
     return stmt
 
 
@@ -1490,10 +1500,14 @@ def _period_overlap(
 
 
 def _filtered_employee_ids(
-    db: Session, department_id: int | None, employee_type: EmployeeType | None
+    db: Session, department_id: int | None, employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> list[int]:
+    """Resolve the filtered employee id set ONCE so every sub-query scopes by
+    the same IN-clause (consistent AND-composed filters across KPI cards,
+    charts, tables and alerts). Empty result -> callers use IN([])."""
     stmt = select(Employee.id)
-    stmt = _employee_scope_filter(stmt, department_id, employee_type)
+    stmt = _employee_scope_filter(stmt, department_id, employee_type, company_id)
     return list(db.scalars(stmt).all())
 
 
@@ -1529,11 +1543,12 @@ def get_kpis(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> KpisResponse:
     """GET /dashboard/kpis — the headline cards. Four aggregate queries over
     paid/generated payslips + approved time-off + attendance health, all
     scoped by the shared employee + period filters."""
-    emp_ids = _filtered_employee_ids(db, department_id, employee_type)
+    emp_ids = _filtered_employee_ids(db, department_id, employee_type, company_id)
     # Resolve the filtered employee set ONCE, then reuse it as an IN-clause
     # on every sub-query (consistent scoping across all KPI numbers). An
     # empty filter result becomes IN([]) = matches nothing, not everything.
@@ -1594,7 +1609,7 @@ def get_kpis(
     approved_toff_days = Decimal(db.scalar(toff_stmt) or 0)
 
     attendance_health_pct = _attendance_health(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
     )
 
     return KpisResponse(
@@ -1628,13 +1643,14 @@ def _attendance_health(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> float:
     """present_and_ontime / total_expected_days over the filtered period.
     Helper for get_kpis. Denominator = sum of each employee's schedule-
     expected working days (so weekends never count against health); guarded
     -> 0.0 when there are no employees or no expected days."""
     period_start, period_end = _resolve_attendance_period(period_start, period_end)
-    emp_ids = _filtered_employee_ids(db, department_id, employee_type)
+    emp_ids = _filtered_employee_ids(db, department_id, employee_type, company_id)
     if not emp_ids:
         return 0.0
 
@@ -1665,6 +1681,7 @@ def get_salary_by_department(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> list[SalaryByDepartmentItem]:
     """{department_name, total_salary (paid net), headcount} — bar chart data.
     Two grouped queries merged in Python: headcount counts ACTIVE employees
@@ -1682,7 +1699,7 @@ def get_salary_by_department(
         .group_by(Department.id, Department.name)
         .order_by(Department.name)
     )
-    emp_stmt = _employee_scope_filter(emp_stmt, department_id, employee_type)
+    emp_stmt = _employee_scope_filter(emp_stmt, department_id, employee_type, company_id)
     headcount_rows = db.execute(emp_stmt).all()
 
     payslip_stmt = (
@@ -1697,7 +1714,7 @@ def get_salary_by_department(
         .group_by(Department.id, Department.name)
     )
     payslip_stmt = _period_overlap(payslip_stmt, period_start, period_end)
-    payslip_stmt = _employee_scope_filter(payslip_stmt, department_id, employee_type)
+    payslip_stmt = _employee_scope_filter(payslip_stmt, department_id, employee_type, company_id)
     salary_rows = db.execute(payslip_stmt).all()
 
     totals = {dept_id: total for dept_id, _name, total in salary_rows}
@@ -1718,13 +1735,15 @@ def get_monthly_net_salary_trend(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> list[MonthlyTrendItem]:
     """Line chart: last N months of PAID payslips (months with no data -> 0).
     Groups PAID payslips by month of period_end (date_trunc), then builds the
     full N-month window back from the anchor month so every bucket exists —
     missing months render as 0, never as gaps in the chart."""
     emp_filter = Employee.id.in_(
-        _filtered_employee_ids(db, department_id, employee_type) or [-1]
+        _filtered_employee_ids(db, department_id, employee_type, company_id)
+        or [-1]
     )
     stmt = (
         select(
@@ -1769,6 +1788,7 @@ def get_attendance_overview(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> AttendanceOverview:
     """Counts by status + computed absent/coverage (absent = expected days
     minus attended days — Ambuj's table has no synthetic absent rows).
@@ -1778,7 +1798,7 @@ def get_attendance_overview(
     over Ambuj's attendances (his statuses + is_manual_correction flag);
     absent and coverage_pct are DERIVED here from schedule expectations."""
     period_start, period_end = _resolve_attendance_period(period_start, period_end)
-    emp_ids = _filtered_employee_ids(db, department_id, employee_type)
+    emp_ids = _filtered_employee_ids(db, department_id, employee_type, company_id)
     if not emp_ids:
         return AttendanceOverview(present=0, late=0, absent=0, overtime=0,
                                   missing_checkouts=0, manual_edits=0, coverage_pct=0.0)
@@ -1831,13 +1851,19 @@ def get_time_off_overview(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> TimeOffOverview:
-    """GET /dashboard/time-off-overview. approved days = SUM over approved
-    day-unit requests; pending = count of to_approve; balances_by_type reads
-    the LIVE v_time_off_balances view (Eldo's SQL view, allocated - taken)
-    aggregated across the filtered employees — balances are never stored."""
+    """GET /dashboard/time-off-overview. Totals + per-type rows built from the
+    LIVE time_off_requests table and the v_time_off_balances view (Eldo's SQL
+    view — allocated - taken, never stored):
+      - approved days = SUM over APPROVED day-unit requests in the period;
+      - pending = count of to_approve requests in the period;
+      - remaining = live balance of the filtered employees per type.
+    approved_days/pending respect the period + dept/type/company filters;
+    remaining is the current balance regardless of the period window."""
     emp_filter = Employee.id.in_(
-        _filtered_employee_ids(db, department_id, employee_type) or [-1]
+        _filtered_employee_ids(db, department_id, employee_type, company_id)
+        or [-1]
     )
 
     approved = _timeoff_aggregate(
@@ -1859,14 +1885,70 @@ def get_time_off_overview(
         .group_by(TimeOffType.name)
         .order_by(TimeOffType.name)
     ).all()
+    remaining_map = {name: Decimal(remaining) for name, remaining in bal_rows}
+
+    # per-type approved days (day-unit types only, period overlap)
+    approved_stmt = (
+        select(
+            TimeOffType.name.label("type_name"),
+            func.coalesce(func.sum(TimeOffRequest.duration), 0).label("days"),
+        )
+        .join(TimeOffType, TimeOffType.id == TimeOffRequest.time_off_type_id)
+        .join(Employee, Employee.id == TimeOffRequest.employee_id)
+        .where(
+            TimeOffRequest.status == "approved",
+            TimeOffType.unit == "days",
+            emp_filter,
+        )
+    )
+    if period_start is not None:
+        approved_stmt = approved_stmt.where(TimeOffRequest.date_to >= period_start)
+    if period_end is not None:
+        approved_stmt = approved_stmt.where(TimeOffRequest.date_from <= period_end)
+    approved_rows = db.execute(
+        approved_stmt.group_by(TimeOffType.name)
+    ).all()
+    approved_map = {name: Decimal(days) for name, days in approved_rows}
+
+    # per-type pending requests (any unit, period overlap)
+    pending_stmt = (
+        select(
+            TimeOffType.name.label("type_name"),
+            func.count(TimeOffRequest.id).label("count"),
+        )
+        .join(TimeOffType, TimeOffType.id == TimeOffRequest.time_off_type_id)
+        .join(Employee, Employee.id == TimeOffRequest.employee_id)
+        .where(TimeOffRequest.status == "to_approve", emp_filter)
+    )
+    if period_start is not None:
+        pending_stmt = pending_stmt.where(TimeOffRequest.date_to >= period_start)
+    if period_end is not None:
+        pending_stmt = pending_stmt.where(TimeOffRequest.date_from <= period_end)
+    pending_rows = db.execute(pending_stmt.group_by(TimeOffType.name)).all()
+    pending_map = {name: int(count) for name, count in pending_rows}
+
+    # one row per type (union of types with balances, approvals or pending)
+    type_names = sorted(
+        set(remaining_map) | set(approved_map) | set(pending_map)
+    )
+    by_type = [
+        TimeOffTypeOverviewItem(
+            time_off_type_name=name,
+            approved_days=approved_map.get(name, Decimal("0")),
+            pending_requests=pending_map.get(name, 0),
+            remaining=remaining_map.get(name, Decimal("0")),
+        )
+        for name in type_names
+    ]
 
     return TimeOffOverview(
         approved_days=Decimal(approved or 0),
         pending_requests=int(pending or 0),
         balances_by_type=[
-            TimeOffBalanceItem(time_off_type_name=name, remaining=Decimal(remaining))
-            for name, remaining in bal_rows
+            TimeOffBalanceItem(time_off_type_name=name, remaining=remaining)
+            for name, remaining in remaining_map.items()
         ],
+        by_type=by_type,
     )
 
 
@@ -1908,14 +1990,17 @@ def get_payroll_alerts(
     period_end: date | None,
     department_id: int | None,
     employee_type: EmployeeType | None,
+    company_id: int | None = None,
 ) -> PayrollAlertsResponse:
     """Open warnings across draft/computed payslips, grouped by type with
-    counts + drill-down payslip ids.
+    counts + drill-down payslip ids, plus the number of UNVALIDATED payslips
+    (draft/computed — money that has not been signed off yet).
     Only draft/computed payslips are 'open' (validated/paid = resolved or
     historical); internal SENT_AT sentinel warnings are excluded so they can
     never surface as an alert. Returns {warning_type, count, payslip_ids}."""
     emp_filter = Employee.id.in_(
-        _filtered_employee_ids(db, department_id, employee_type) or [-1]
+        _filtered_employee_ids(db, department_id, employee_type, company_id)
+        or [-1]
     )
     stmt = (
         select(PayslipWarning.warning_type, PayslipWarning.payslip_id)
@@ -1939,4 +2024,105 @@ def get_payroll_alerts(
         PayrollAlertItem(warning_type=wt, count=len(ids), payslip_ids=sorted(set(ids)))
         for wt, ids in sorted(grouped.items(), key=lambda kv: kv[0].value)
     ]
-    return PayrollAlertsResponse(alerts=alerts, total_open_payslips=total_open)
+
+    # Unvalidated payslips: every draft/computed row in scope (they have NOT
+    # been validated/paid, so they are actionable "pending" items regardless
+    # of whether they carry a warning).
+    unvalidated_stmt = (
+        select(func.count(Payslip.id))
+        .join(Employee, Employee.id == Payslip.employee_id)
+        .where(
+            Payslip.status.in_([PayrunStatus.draft, PayrunStatus.computed]),
+            emp_filter,
+        )
+    )
+    unvalidated_stmt = _period_overlap(unvalidated_stmt, period_start, period_end)
+    unvalidated = db.scalar(unvalidated_stmt) or 0
+
+    return PayrollAlertsResponse(
+        alerts=alerts,
+        total_open_payslips=total_open,
+        unvalidated_payslips=int(unvalidated),
+    )
+
+
+def get_payslip_status_overview(
+    db: Session,
+    period_start: date | None,
+    period_end: date | None,
+    department_id: int | None,
+    employee_type: EmployeeType | None,
+    company_id: int | None = None,
+) -> PayslipStatusOverview:
+    """GET /dashboard/payslip-status — the Payslip Status distribution panel.
+    Live counts of payslips per lifecycle state (paid / validated / computed /
+    draft / cancelled) within the filters, plus two derived actionable numbers:
+      - unvalidated  = draft + computed (amounts not yet signed off);
+      - with_warnings = distinct open (draft/computed) payslips carrying at
+        least one real warning (SENT_AT sentinels excluded).
+    Every number comes from a live GROUP BY over payslips + payslip_warnings."""
+    emp_filter = Employee.id.in_(
+        _filtered_employee_ids(db, department_id, employee_type, company_id)
+        or [-1]
+    )
+
+    stmt = (
+        select(Payslip.status, func.count(Payslip.id))
+        .join(Employee, Employee.id == Payslip.employee_id)
+        .where(emp_filter)
+    )
+    stmt = _period_overlap(stmt, period_start, period_end)
+    rows = db.execute(stmt.group_by(Payslip.status)).all()
+    counts = {status: int(count) for status, count in rows}
+
+    warned_stmt = (
+        select(func.count(func.distinct(Payslip.id)))
+        .join(PayslipWarning, PayslipWarning.payslip_id == Payslip.id)
+        .join(Employee, Employee.id == Payslip.employee_id)
+        .where(
+            Payslip.status.in_([PayrunStatus.draft, PayrunStatus.computed]),
+            PayslipWarning.message.not_like(f"{SENT_AT_SENTINEL}%"),
+            emp_filter,
+        )
+    )
+    warned_stmt = _period_overlap(warned_stmt, period_start, period_end)
+    with_warnings = db.scalar(warned_stmt) or 0
+
+    draft = counts.get(PayrunStatus.draft, 0)
+    computed = counts.get(PayrunStatus.computed, 0)
+    return PayslipStatusOverview(
+        draft=draft,
+        computed=computed,
+        validated=counts.get(PayrunStatus.validated, 0),
+        paid=counts.get(PayrunStatus.paid, 0),
+        cancelled=counts.get(PayrunStatus.cancelled, 0),
+        unvalidated=draft + computed,
+        with_warnings=int(with_warnings),
+    )
+
+
+def get_dashboard_filter_options(db: Session) -> DashboardFilterOptionsResponse:
+    """GET /dashboard/filter-options — live option lists for the composable
+    dashboard filter bar. Companies/departments come from real rows (active
+    only); employee types come from the shared EmployeeType enum (same values
+    the API accepts as query params). Nothing here is hardcoded UI data."""
+    companies = db.execute(
+        select(Company.id, Company.name)
+        .where(Company.is_active.is_(True))
+        .order_by(Company.name)
+    ).all()
+    departments = db.execute(
+        select(Department.id, Department.name, Department.company_id)
+        .where(Department.is_active.is_(True))
+        .order_by(Department.name)
+    ).all()
+    return DashboardFilterOptionsResponse(
+        companies=[
+            FilterOptionItem(id=cid, name=cname) for cid, cname in companies
+        ],
+        departments=[
+            FilterOptionItem(id=did, name=dname, company_id=dcompany)
+            for did, dname, dcompany in departments
+        ],
+        employee_types=[t.value for t in EmployeeType],
+    )

@@ -1,22 +1,31 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+// Payruns — list + the 2-step wizard (scope -> pick employees -> create).
+// The backend is stateless between steps: POST /payruns/draft-scope only
+// returns eligible employees; the actual Payrun row is created by POST
+// /payruns with the echoed scope + chosen employee ids.
+
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
   ApiError,
   createPayrun,
   draftPayrunScope,
-  listDepartments,
   listPayruns,
   listSalaryStructures,
 } from "../api/client";
 import type {
-  DepartmentSummary,
   DraftScopeResponse,
+  PayrunScope,
   PayrunStatus,
   PayrunSummary,
-  SalaryStructureSummary,
 } from "../api/types";
-import { fmtDate } from "../auth";
+import {
+  fmtDate,
+  fmtNum,
+  monthEndIso,
+  nextMonthStartIso,
+  useAuth,
+} from "../auth";
 
 const STATUS_LABEL: Record<PayrunStatus, string> = {
   draft: "Draft",
@@ -26,324 +35,331 @@ const STATUS_LABEL: Record<PayrunStatus, string> = {
   cancelled: "Cancelled",
 };
 
-const STATUS_CLASS: Record<PayrunStatus, string> = {
-  draft: "badge-muted",
-  computed: "badge-overtime",
-  validated: "badge-warn",
-  paid: "badge-ok",
-  cancelled: "badge-req-cancelled",
-};
-
-interface ScopeForm {
-  salary_structure_id: string;
-  period_start: string;
-  period_end: string;
-  department_filter_id: string;
-  name: string;
+export function PayrunStatusBadge({ status }: { status: PayrunStatus }) {
+  return (
+    <span className={`badge badge-payrun-${status}`}>
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
-const EMPTY_SCOPE: ScopeForm = {
-  salary_structure_id: "",
-  period_start: "",
-  period_end: "",
-  department_filter_id: "",
-  name: "",
-};
-
 export function PayrunsPage() {
-  const navigate = useNavigate();
+  const nav = useNavigate();
+  const { hasRole } = useAuth();
+  const canWrite = hasRole("HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN");
 
-  const [rows, setRows] = useState<PayrunSummary[]>([]);
-  const [structures, setStructures] = useState<SalaryStructureSummary[]>([]);
-  const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [payruns, setPayruns] = useState<PayrunSummary[]>([]);
+  const [structures, setStructures] = useState<{ id: number; name: string }[]>([]);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  // Wizard state (stateless - no row is created until step 2 finishes)
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [step, setStep] = useState<1 | 2>(1);
-  const [scopeForm, setScopeForm] = useState<ScopeForm>(EMPTY_SCOPE);
-  const [draft, setDraft] = useState<DraftScopeResponse | null>(null);
+  // wizard state
+  const [showWizard, setShowWizard] = useState(false);
+  const [scope, setScope] = useState<PayrunScope>(() => {
+    const start = nextMonthStartIso();
+    return {
+      salary_structure_id: 0,
+      period_start: start,
+      period_end: monthEndIso(start),
+      name: "",
+    };
+  });
+  const [preview, setPreview] = useState<DraftScopeResponse | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [stepSearch, setStepSearch] = useState("");
-  const [stepDept, setStepDept] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [wizardMsg, setWizardMsg] = useState("");
+  const [wizardErr, setWizardErr] = useState("");
 
   const load = useCallback(async () => {
-    setError(null);
+    setError("");
     try {
-      const [payrunsPage, structPage, deptPage] = await Promise.all([
-        listPayruns(),
-        listSalaryStructures(),
-        listDepartments(),
-      ]);
-      setRows(payrunsPage.items);
-      setStructures(structPage.items);
-      setDepartments(deptPage.items);
+      const page = await listPayruns(
+        statusFilter ? { status: statusFilter as PayrunStatus } : {},
+      );
+      setPayruns(page.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load payruns.");
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const openWizard = () => {
-    setWizardOpen(true);
-    setStep(1);
-    setScopeForm(EMPTY_SCOPE);
-    setDraft(null);
-    setSelected(new Set());
-    setStepSearch("");
-    setStepDept("");
-    setError(null);
-    setNotice(null);
-  };
+  useEffect(() => {
+    if (!showWizard) return;
+    listSalaryStructures()
+      .then((p) => setStructures(p.items))
+      .catch((err) =>
+        setWizardErr(err instanceof ApiError ? err.message : String(err)),
+      );
+  }, [showWizard]);
 
-  const closeWizard = () => {
-    setWizardOpen(false);
-    setDraft(null);
-  };
-
-  async function onStep1(e: FormEvent) {
+  async function onSubmitScope(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    if (!scopeForm.salary_structure_id || !scopeForm.period_start || !scopeForm.period_end) {
-      setError("Salary structure and period are required.");
-      return;
-    }
-    if (scopeForm.period_end < scopeForm.period_start) {
-      setError("Period end must be on or after period start.");
-      return;
-    }
     setBusy(true);
+    setWizardErr("");
+    setWizardMsg("");
     try {
-      const res = await draftPayrunScope({
-        salary_structure_id: Number(scopeForm.salary_structure_id),
-        period_start: scopeForm.period_start,
-        period_end: scopeForm.period_end,
-        department_filter_id: scopeForm.department_filter_id
-          ? Number(scopeForm.department_filter_id)
-          : null,
-        name: scopeForm.name || null,
-      });
-      setDraft(res);
-      setSelected(new Set(res.eligible_employees.map((emp) => emp.id)));
-      setStep(2);
+      const res = await draftPayrunScope(scope);
+      setPreview(res);
+      setSelected(new Set());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load eligible employees.");
+      setWizardErr(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   }
 
-  const visibleEligible = useMemo(() => {
-    if (!draft) return [];
-    const q = stepSearch.trim().toLowerCase();
-    return draft.eligible_employees.filter((emp) => {
-      if (stepDept && emp.department_name !== stepDept) return false;
-      if (!q) return true;
-      return (
-        emp.full_name.toLowerCase().includes(q) ||
-        emp.work_email.toLowerCase().includes(q) ||
-        String(emp.id) === q
-      );
-    });
-  }, [draft, stepSearch, stepDept]);
-
-  function toggleEmp(id: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function toggleAll() {
+    if (!preview) return;
+    setSelected(
+      selected.size === preview.eligible_employees.length
+        ? new Set()
+        : new Set(preview.eligible_employees.map((x) => x.id)),
+    );
   }
 
-  async function onStep2(e: FormEvent) {
+  async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    if (!draft) return;
-    if (selected.size === 0) {
-      setError("Select at least one employee.");
-      return;
-    }
+    if (!preview) return;
     setBusy(true);
+    setWizardErr("");
+    setWizardMsg("");
     try {
-      const created = await createPayrun({
-        scope: draft.scope,
+      const run = await createPayrun({
+        scope: preview.scope,
         employee_ids: [...selected],
       });
-      closeWizard();
-      setNotice(`Payrun "${created.name}" created - open it to compute payslips.`);
-      await load();
-      navigate(`/payroll/payruns/${created.id}`);
+      resetWizard();
+      nav(`/payroll/payruns/${run.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create payrun.");
+      setWizardErr(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  function resetWizard() {
+    setPreview(null);
+    setSelected(new Set());
+    setShowWizard(false);
+    setWizardMsg("");
+    setWizardErr("");
   }
 
   return (
-    <div className="stack">
+    <div>
       <div className="row spread">
         <h2>Payruns</h2>
-        <button className="btn btn-primary" onClick={openWizard} disabled={busy}>
-          ＋ New payrun
-        </button>
-      </div>
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
-
-      {/* Wizard ------------------------------------------------------------ */}
-      {wizardOpen && (
-        <div className="wizard card">
-          <div className="wizard-head">
-            <h3>New payrun - step {step} of 2</h3>
-            <button className="btn btn-ghost btn-sm" onClick={closeWizard} disabled={busy}>
-              ✕ Close
+        <div className="row-actions">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            {Object.entries(STATUS_LABEL).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+          {canWrite && !showWizard && (
+            <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+              New payrun
             </button>
-          </div>
+          )}
+          {showWizard && (
+            <button className="btn btn-ghost" onClick={resetWizard}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
 
-          {step === 1 && (
-            <form className="grid" onSubmit={onStep1}>
-              <label className="field field-wide">
-                <span>Salary structure</span>
-                <select
-                  value={scopeForm.salary_structure_id}
-                  onChange={(e) =>
-                    setScopeForm({ ...scopeForm, salary_structure_id: e.target.value })
-                  }
-                >
-                  <option value="">Select…</option>
-                  {structures.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
+      {error ? <div className="alert alert-error">{error}</div> : null}
+
+      {showWizard && (
+        <div className="card" style={{ marginTop: 12, padding: 16 }}>
+          <h3 style={{ marginTop: 0 }}>
+            {preview ? "Step 2 — pick employees" : "Step 1 — payrun scope"}
+          </h3>
+          {wizardMsg ? <div className="alert alert-ok">{wizardMsg}</div> : null}
+          {wizardErr ? <div className="alert alert-error">{wizardErr}</div> : null}
+
+          {!preview && (
+            <form className="stack" onSubmit={onSubmitScope}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Salary structure</span>
+                  <select
+                    required
+                    value={scope.salary_structure_id}
+                    onChange={(e) =>
+                      setScope({ ...scope, salary_structure_id: Number(e.target.value) })
+                    }
+                  >
+                    <option value={0} disabled>
+                      Select…
                     </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Period start</span>
-                <input
-                  type="date"
-                  value={scopeForm.period_start}
-                  onChange={(e) => setScopeForm({ ...scopeForm, period_start: e.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Period end</span>
-                <input
-                  type="date"
-                  min={scopeForm.period_start}
-                  value={scopeForm.period_end}
-                  onChange={(e) => setScopeForm({ ...scopeForm, period_end: e.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Department filter (optional)</span>
-                <select
-                  value={scopeForm.department_filter_id}
-                  onChange={(e) =>
-                    setScopeForm({ ...scopeForm, department_filter_id: e.target.value })
-                  }
-                >
-                  <option value="">All departments</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field field-wide">
-                <span>Name (optional)</span>
-                <input
-                  type="text"
-                  value={scopeForm.name}
-                  onChange={(e) => setScopeForm({ ...scopeForm, name: e.target.value })}
-                  placeholder="e.g. Payrun - October 2026"
-                />
-              </label>
-              <div className="row align-end">
-                <button type="button" className="btn btn-ghost" onClick={closeWizard} disabled={busy}>
-                  Cancel
-                </button>
+                    {structures.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Run name (optional)</span>
+                  <input
+                    value={scope.name ?? ""}
+                    placeholder={`Payrun — ${scope.period_start.slice(0, 7)}`}
+                    onChange={(e) => setScope({ ...scope, name: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>Period start</span>
+                  <input
+                    type="date"
+                    required
+                    value={scope.period_start}
+                    onChange={(e) =>
+                      setScope({ ...scope, period_start: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Period end</span>
+                  <input
+                    type="date"
+                    required
+                    value={scope.period_end}
+                    onChange={(e) =>
+                      setScope({ ...scope, period_end: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Department filter (optional)</span>
+                  <input
+                    type="number"
+                    placeholder="department id"
+                    value={scope.department_filter_id ?? ""}
+                    onChange={(e) =>
+                      setScope({
+                        ...scope,
+                        department_filter_id: e.target.value
+                          ? Number(e.target.value)
+                          : null,
+                      })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Employee type filter (optional)</span>
+                  <select
+                    value={scope.employee_type_filter ?? ""}
+                    onChange={(e) =>
+                      setScope({
+                        ...scope,
+                        employee_type_filter: e.target.value || null,
+                      })
+                    }
+                  >
+                    <option value="">All types</option>
+                    <option value="full_time">Full time</option>
+                    <option value="part_time">Part time</option>
+                    <option value="contract">Contract</option>
+                    <option value="intern">Intern</option>
+                  </select>
+                </label>
+              </div>
+              <div className="row-actions">
                 <button className="btn btn-primary" disabled={busy}>
-                  {busy ? "Loading employees…" : "Continue →"}
+                  Preview eligible employees
                 </button>
               </div>
             </form>
           )}
 
-          {step === 2 && draft && (
-            <form onSubmit={onStep2}>
-              <div className="grid" style={{ marginBottom: 12 }}>
-                <label className="field field-wide">
-                  <span>Search</span>
-                  <input
-                    type="text"
-                    value={stepSearch}
-                    onChange={(e) => setStepSearch(e.target.value)}
-                    placeholder="Name or email…"
-                  />
-                </label>
-                <label className="field">
-                  <span>Department</span>
-                  <select value={stepDept} onChange={(e) => setStepDept(e.target.value)}>
-                    <option value="">All</option>
-                    {[...new Set(draft.eligible_employees.map((e) => e.department_name))].map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <p className="muted small" style={{ marginBottom: 8 }}>
-                {draft.eligible_employees.length} eligible employees ·{" "}
-                <b>{selected.size}</b> selected · employees without a contract for the
-                period are flagged.
+          {preview && (
+            <form className="stack" onSubmit={onCreate}>
+              <p className="small muted">
+                {fmtNum(preview.eligible_count)} active employee(s) match the
+                scope. People without a contract covering the period are
+                flagged — they will surface a{" "}
+                <code>missing_contract</code> warning on Compute.
               </p>
-
-              <div className="wizard-list">
-                {visibleEligible.map((emp) => (
-                  <label key={emp.id} className="wizard-row">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(emp.id)}
-                      onChange={() => toggleEmp(emp.id)}
-                    />
-                    <span className="ld-avatar" style={{ width: 30, height: 30, fontSize: 12 }}>
-                      {emp.full_name.slice(0, 1)}
-                    </span>
-                    <span className="wizard-row-name">
-                      <b>{emp.full_name}</b>
-                      <span className="small muted">{emp.work_email}</span>
-                    </span>
-                    <span className="small muted">{emp.department_name}</span>
-                    {!emp.has_contract ? (
-                      <span className="badge badge-missing_checkout">No active contract</span>
-                    ) : (
-                      <span className="badge badge-ok">Has contract</span>
-                    )}
-                  </label>
-                ))}
-                {visibleEligible.length === 0 && (
-                  <p className="muted">No employees match the filters.</p>
-                )}
+              <div className="row-actions">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={toggleAll}>
+                  {selected.size === preview.eligible_employees.length
+                    ? "Clear all"
+                    : "Select all"}
+                </button>
+                <span className="small muted">
+                  {selected.size} selected
+                </span>
               </div>
-
-              <div className="row" style={{ marginTop: 14 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }} />
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Type</th>
+                    <th>Contract</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.eligible_employees.map((emp) => (
+                    <tr key={emp.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(emp.id)}
+                          onChange={() => {
+                            const next = new Set(selected);
+                            if (next.has(emp.id)) next.delete(emp.id);
+                            else next.add(emp.id);
+                            setSelected(next);
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <b>{emp.full_name}</b>
+                        <div className="muted small">{emp.work_email}</div>
+                      </td>
+                      <td>{emp.department_name}</td>
+                      <td>{emp.employee_type.replace("_", " ")}</td>
+                      <td>
+                        {emp.has_contract ? (
+                          <span className="badge badge-ok">Covered</span>
+                        ) : (
+                          <span className="badge badge-payrun-cancelled">
+                            No contract
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="row-actions">
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  onClick={() => setStep(1)}
-                  disabled={busy}
+                  onClick={() => setPreview(null)}
                 >
-                  ← Back
+                  Back to scope
                 </button>
-                <button className="btn btn-primary" disabled={busy || selected.size === 0}>
-                  {busy ? "Creating…" : `Create payrun (${selected.size})`}
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || selected.size === 0}
+                >
+                  Create payrun ({selected.size})
                 </button>
               </div>
             </form>
@@ -351,49 +367,47 @@ export function PayrunsPage() {
         </div>
       )}
 
-      {/* List --------------------------------------------------------------- */}
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Structure</th>
-            <th>Period</th>
-            <th>Status</th>
-            <th>Employees</th>
-            <th>Payslips</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((p) => {
-            const structure = structures.find((s) => s.id === p.salary_structure_id);
-            return (
-              <tr key={p.id}>
-                <td><b>{p.name}</b></td>
-                <td>{structure?.name ?? `#${p.salary_structure_id}`}</td>
-                <td>{fmtDate(p.period_start)} → {fmtDate(p.period_end)}</td>
-                <td>
-                  <span className={`badge ${STATUS_CLASS[p.status]}`}>
-                    {STATUS_LABEL[p.status]}
-                  </span>
-                </td>
-                <td>{p.employee_count}</td>
-                <td>{p.payslip_count}</td>
-                <td className="row-actions">
-                  <Link className="btn btn-ghost btn-sm" to={`/payroll/payruns/${p.id}`}>
-                    Open
-                  </Link>
+      {loading ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <table className="table" style={{ marginTop: 12 }}>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Period</th>
+              <th>Status</th>
+              <th>Employees</th>
+              <th>Payslips</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payruns.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="muted">
+                  No payruns yet — click "New payrun" to create one.
                 </td>
               </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={7} className="muted">No payruns yet - create your first one.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            ) : (
+              payruns.map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    <Link to={`/payroll/payruns/${p.id}`}>{p.name}</Link>
+                    <div className="muted small">
+                      {fmtDate(p.period_start)} → {fmtDate(p.period_end)}
+                    </div>
+                  </td>
+                  <td>{fmtDate(p.period_start)}</td>
+                  <td>
+                    <PayrunStatusBadge status={p.status} />
+                  </td>
+                  <td>{fmtNum(p.employee_count)}</td>
+                  <td>{fmtNum(p.payslip_count)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

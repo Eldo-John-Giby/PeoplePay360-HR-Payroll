@@ -16,6 +16,7 @@ import type { Attendance, AttendanceStatus, AttendanceSummary } from "../api/typ
 import {
   fmtDateTime,
   fmtHours,
+  fmtNum,
   naiveIso,
   toLocalInput,
   useAuth,
@@ -30,12 +31,45 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
 };
 
 function StatusBadge({ status }: { status: AttendanceStatus }) {
-  return <span className={`badge badge-${status}`}>{STATUS_LABEL[status]}</span>;
+  const cls =
+    status === "present"
+      ? "badge badge-ok"
+      : status === "late"
+      ? "badge badge-req-to_approve"
+      : status === "absent"
+      ? "badge badge-absent"
+      : status === "overtime"
+      ? "badge badge-present"
+      : "badge badge-warn";
+
+  return <span className={cls}>{STATUS_LABEL[status]}</span>;
 }
 
 function ErrorBanner({ message }: { message: string | null }) {
   if (!message) return null;
   return <div className="alert alert-error">{message}</div>;
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+}) {
+  return (
+    <div className="card metric" style={{ padding: "16px", flex: 1, minWidth: 160 }}>
+      <div className="row spread" style={{ marginBottom: 4 }}>
+        <span className="muted small" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          {label}
+        </span>
+      </div>
+      <b style={{ fontSize: 22, display: "block", color: "#111827" }}>{value}</b>
+      {hint && <small className="muted" style={{ marginTop: 4, display: "block" }}>{hint}</small>}
+    </div>
+  );
 }
 
 function AttendanceTable({
@@ -47,38 +81,66 @@ function AttendanceTable({
   action?: (row: Attendance) => ReactNode;
   showNotes?: boolean;
 }) {
-  if (rows.length === 0) return <div className="muted">No attendance records.</div>;
+  if (rows.length === 0) {
+    return (
+      <div className="card" style={{ padding: 24, textAlign: "center" }}>
+        <p className="muted" style={{ margin: 0 }}>No attendance records found.</p>
+      </div>
+    );
+  }
+
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>Employee</th>
-          <th>Date</th>
-          <th>Check in</th>
-          <th>Check out</th>
-          <th>Hours</th>
-          <th>Status</th>
-          <th>Manual</th>
-          {showNotes && <th>Notes</th>}
-          {action && <th></th>}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((a) => (
-          <tr key={a.id}>
-            <td>{a.employee_name ?? `#${a.employee_id}`}</td>
-            <td>{new Date(a.check_in).toLocaleDateString()}</td>
-            <td>{fmtDateTime(a.check_in)}</td>
-            <td>{fmtDateTime(a.check_out)}</td>
-            <td>{fmtHours(a.worked_hours)}</td>
-            <td><StatusBadge status={a.status} /></td>
-            <td>{a.is_manual_correction ? "✎" : ""}</td>
-            {showNotes && <td>{a.notes || ""}</td>}
-            {action && <td>{action(a)}</td>}
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <table className="table" style={{ margin: 0 }}>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Date</th>
+            <th>Check In</th>
+            <th>Check Out</th>
+            <th style={{ textAlign: "right" }}>Worked Hours</th>
+            <th>Status</th>
+            <th>Type</th>
+            {showNotes && <th>Notes</th>}
+            {action && <th style={{ textAlign: "right" }}>Actions</th>}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.id}>
+              <td>
+                <b style={{ color: "#111827" }}>{a.employee_name ?? `Employee #${a.employee_id}`}</b>
+                <div className="small muted">ID #{a.employee_id}</div>
+              </td>
+              <td>{new Date(a.check_in).toLocaleDateString()}</td>
+              <td>
+                <span style={{ fontWeight: 500 }}>{fmtDateTime(a.check_in)}</span>
+              </td>
+              <td>
+                {a.check_out ? (
+                  <span style={{ fontWeight: 500 }}>{fmtDateTime(a.check_out)}</span>
+                ) : (
+                  <span className="badge badge-warn">Active / Open</span>
+                )}
+              </td>
+              <td style={{ textAlign: "right", fontWeight: 600 }}>{fmtHours(a.worked_hours)}</td>
+              <td>
+                <StatusBadge status={a.status} />
+              </td>
+              <td>
+                {a.is_manual_correction ? (
+                  <span className="badge badge-muted">Manual correction</span>
+                ) : (
+                  <span className="small muted">Auto punch</span>
+                )}
+              </td>
+              {showNotes && <td className="small muted">{a.notes || "—"}</td>}
+              {action && <td style={{ textAlign: "right" }}>{action(a)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -141,38 +203,67 @@ function EmployeeAttendance() {
   }
 
   return (
-    <div className="stack">
-      <h2>My attendance</h2>
+    <div className="stack" style={{ gap: 20 }}>
+      <div className="row spread" style={{ alignItems: "center" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>My Attendance</h2>
+          <p className="muted small" style={{ margin: "4px 0 0" }}>
+            Punch check-in / check-out and view your monthly attendance summary.
+          </p>
+        </div>
+      </div>
+
       <ErrorBanner message={error} />
 
-      <div className="row">
-        {openRow ? (
-          <button className="btn btn-warn" disabled={busy} onClick={onCheckOut}>
-            {busy ? "Working…" : "Check out"}
-            {openRow.check_in && <> (in since {fmtDateTime(openRow.check_in)})</>}
-          </button>
-        ) : (
-          <button className="btn btn-primary" disabled={busy} onClick={onCheckIn}>
-            {busy ? "Working…" : "Check in now"}
-          </button>
-        )}
+      {/* Punch Action Hero Card */}
+      <div className="card" style={{ padding: 24, background: "#f8fafc" }}>
+        <div className="row spread" style={{ alignItems: "center" }}>
+          <div>
+            <span className="small muted" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Current Status
+            </span>
+            <div style={{ marginTop: 4 }}>
+              {openRow ? (
+                <span className="badge badge-ok" style={{ fontSize: 15, padding: "6px 14px" }}>
+                  Checked In (Since {fmtDateTime(openRow.check_in)})
+                </span>
+              ) : (
+                <span className="badge badge-muted" style={{ fontSize: 15, padding: "6px 14px" }}>
+                  Not Checked In
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            {openRow ? (
+              <button className="btn btn-warn" style={{ padding: "10px 24px", fontSize: 15 }} disabled={busy} onClick={onCheckOut}>
+                {busy ? "Updating…" : "Check Out Now"}
+              </button>
+            ) : (
+              <button className="btn btn-primary" style={{ padding: "10px 24px", fontSize: 15 }} disabled={busy} onClick={onCheckIn}>
+                {busy ? "Updating…" : "Check In Now"}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {summary && (
-        <div className="cards">
-          <div className="card metric"><b>{summary.present}</b><span>Present</span></div>
-          <div className="card metric"><b>{summary.late}</b><span>Late</span></div>
-          <div className="card metric"><b>{summary.overtime}</b><span>Overtime</span></div>
-          <div className="card metric"><b>{summary.missing_checkout}</b><span>Missing checkout</span></div>
-          <div className="card metric"><b>{summary.absent}</b><span>Absent</span></div>
-          <div className="card metric">
-            <b>{summary.coverage_pct.toFixed(1)}%</b><span>Coverage (this month)</span>
-          </div>
+        <div className="cards" style={{ gap: 12 }}>
+          <MetricCard label="Present Days" value={fmtNum(summary.present)} />
+          <MetricCard label="Late Days" value={fmtNum(summary.late)} />
+          <MetricCard label="Overtime" value={fmtNum(summary.overtime)} />
+          <MetricCard label="Missing Checkout" value={fmtNum(summary.missing_checkout)} />
+          <MetricCard label="Absent" value={fmtNum(summary.absent)} />
+          <MetricCard label="Coverage" value={`${summary.coverage_pct.toFixed(1)}%`} hint="Current month" />
         </div>
       )}
 
-      <h3>Recent records</h3>
-      <AttendanceTable rows={rows} showNotes />
+      <div>
+        <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 600 }}>Recent Attendance Records</h3>
+        <AttendanceTable rows={rows} showNotes />
+      </div>
     </div>
   );
 }
@@ -195,17 +286,12 @@ function HrAttendance() {
   const [rows, setRows] = useState<Attendance[]>([]);
   const [status, setStatus] = useState<AttendanceStatus | "">("");
   const [manualOnly, setManualOnly] = useState(false);
-  // ?employee=<id> lets the employee directory deep-link straight into a
-  // filtered attendance view for one person.
-  const [employeeFilter, setEmployeeFilter] = useState(
-    searchParams.get("employee") ?? "",
-  );
+  const [employeeFilter, setEmployeeFilter] = useState(searchParams.get("employee") ?? "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // editor row: null = no correction open, else the row being corrected.
   const [editing, setEditing] = useState<Attendance | null>(null);
 
   const load = useCallback(async () => {
@@ -235,14 +321,13 @@ function HrAttendance() {
     setNotice(null);
     try {
       const res = await sweepMissingCheckouts();
-      setNotice(`Sweep complete - ${res.swept} open entries marked as missing checkout.`);
+      setNotice(`Sweep completed successfully. ${res.swept} open entries marked as missing checkout.`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Sweep failed.");
     }
   }
 
-  // --- manual entry (new row) -------------------------------------------
   const [form, setForm] = useState<TimesForm>(EMPTY_FORM);
 
   async function onManualCreate(e: FormEvent) {
@@ -251,7 +336,7 @@ function HrAttendance() {
     setNotice(null);
     const employee_id = Number(form.employee_id);
     if (!Number.isInteger(employee_id) || employee_id <= 0) {
-      setError("Enter a valid employee id (numeric).");
+      setError("Enter a valid employee ID (numeric).");
       return;
     }
     try {
@@ -262,14 +347,13 @@ function HrAttendance() {
         notes: form.notes || null,
       });
       setForm(EMPTY_FORM);
-      setNotice("Manual attendance entry created (marked as a correction).");
+      setNotice("Manual attendance entry created successfully.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create entry.");
     }
   }
 
-  // --- correction (existing row) ------------------------------------------
   const [correction, setCorrection] = useState<TimesForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -279,7 +363,7 @@ function HrAttendance() {
     setCorrection({
       employee_id: String(row.employee_id),
       check_in: toLocalInput(row.check_in),
-      check_out: toLocalInput(row.check_out) || "", // empty = keep closed as-is? open rows keep null
+      check_out: toLocalInput(row.check_out) || "",
       notes: row.notes ?? "",
     });
     setEditing(row);
@@ -297,9 +381,6 @@ function HrAttendance() {
         check_out?: string | null;
         notes?: string | null;
       } = {};
-      // Always send what the user sees so the result is WYSIWYG; sending an
-      // empty check_out would REOPEN a closed row, which is not allowed - the
-      // backend treats unset as "unchanged", so only include it when filled.
       if (correction.check_in) changed.check_in = naiveIso(correction.check_in);
       if (correction.check_out) changed.check_out = naiveIso(correction.check_out);
       if (correction.notes !== (editing.notes ?? "")) {
@@ -307,7 +388,7 @@ function HrAttendance() {
       }
       await updateAttendance(editing.id, changed);
       setEditing(null);
-      setNotice(`Entry #${editing.id} corrected and re-stamped (worked hours & status recomputed).`);
+      setNotice(`Entry #${editing.id} corrected and recomputed successfully.`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save correction.");
@@ -317,55 +398,89 @@ function HrAttendance() {
   }
 
   return (
-    <div className="stack">
-      <div className="row spread">
-        <h2>Attendance - all employees</h2>
+    <div className="stack" style={{ gap: 20 }}>
+      {/* Header */}
+      <div className="row spread" style={{ alignItems: "center" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Attendance — All Employees</h2>
+          <p className="muted small" style={{ margin: "4px 0 0" }}>
+            Monitor check-ins, run missing checkout sweeps, and apply manual corrections.
+          </p>
+        </div>
         <button className="btn btn-ghost" onClick={() => void onSweep()}>
           Run missing-checkout sweep
         </button>
       </div>
+
       <ErrorBanner message={error} />
       {notice && <div className="alert alert-ok">{notice}</div>}
 
-      <div className="row filters">
-        <select value={status} onChange={(e) => setStatus(e.target.value as AttendanceStatus | "")}>
-          <option value="">All statuses</option>
-          {Object.entries(STATUS_LABEL).map(([v, label]) => (
-            <option key={v} value={v}>{label}</option>
-          ))}
-        </select>
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={manualOnly}
-            onChange={(e) => setManualOnly(e.target.checked)}
-          />
-          Manual corrections only
-        </label>
-        <input
-          type="number"
-          placeholder="Employee id…"
-          value={employeeFilter}
-          onChange={(e) => setEmployeeFilter(e.target.value)}
-        />
-        {(status || manualOnly || employeeFilter || dateFrom || dateTo) && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              setStatus("");
-              setManualOnly(false);
-              setEmployeeFilter("");
-              setDateFrom("");
-              setDateTo("");
-            }}
-          >
-            Clear filters
-          </button>
-        )}
+      {/* Filters Card */}
+      <div className="card" style={{ padding: 14 }}>
+        <div className="form-grid" style={{ marginBottom: 0 }}>
+          <label className="field">
+            <span>Filter Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as AttendanceStatus | "")}>
+              <option value="">All Statuses</option>
+              {Object.entries(STATUS_LABEL).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Date From</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+
+          <label className="field">
+            <span>Date To</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+
+          <label className="field">
+            <span>Search Employee ID</span>
+            <input
+              type="number"
+              placeholder="Search employee ID…"
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+            />
+          </label>
+
+          <div className="field align-end">
+            <label className="check" style={{ marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={manualOnly}
+                onChange={(e) => setManualOnly(e.target.checked)}
+              />
+              <span>Manual corrections only</span>
+            </label>
+          </div>
+
+          {(status || manualOnly || employeeFilter || dateFrom || dateTo) && (
+            <div className="row-actions" style={{ alignItems: "flex-end" }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setStatus("");
+                  setManualOnly(false);
+                  setEmployeeFilter("");
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+              >
+                Reset Filters
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Table */}
       <AttendanceTable
         rows={rows}
         showNotes
@@ -376,91 +491,119 @@ function HrAttendance() {
         )}
       />
 
+      {/* Manual Entry or Correction Card */}
       {editing === null ? (
-        <div className="card">
-          <h3>Manual entry (HR backfill / new record)</h3>
-          <form className="row" onSubmit={onManualCreate}>
-            <input
-              type="number"
-              required
-              placeholder="Employee id"
-              value={form.employee_id}
-              onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
-            />
-            <input
-              type="datetime-local"
-              required
-              aria-label="Check in"
-              value={form.check_in}
-              onChange={(e) => setForm({ ...form, check_in: e.target.value })}
-            />
-            <input
-              type="datetime-local"
-              required
-              aria-label="Check out"
-              value={form.check_out}
-              onChange={(e) => setForm({ ...form, check_out: e.target.value })}
-            />
-            <input
-              placeholder="Notes (optional)"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-            <button className="btn btn-primary" type="submit">Add entry</button>
+        <div className="card" style={{ padding: 20 }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 600 }}>Manual Attendance Entry</h3>
+          <form onSubmit={onManualCreate} className="stack" style={{ gap: 14 }}>
+            <div className="form-grid" style={{ marginBottom: 0 }}>
+              <label className="field">
+                <span>Employee ID</span>
+                <input
+                  type="number"
+                  required
+                  placeholder="e.g. 1"
+                  value={form.employee_id}
+                  onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
+                />
+              </label>
+
+              <label className="field">
+                <span>Check In Time</span>
+                <input
+                  type="datetime-local"
+                  required
+                  value={form.check_in}
+                  onChange={(e) => setForm({ ...form, check_in: e.target.value })}
+                />
+              </label>
+
+              <label className="field">
+                <span>Check Out Time</span>
+                <input
+                  type="datetime-local"
+                  required
+                  value={form.check_out}
+                  onChange={(e) => setForm({ ...form, check_out: e.target.value })}
+                />
+              </label>
+
+              <label className="field">
+                <span>Notes (Optional)</span>
+                <input
+                  placeholder="Reason for manual entry…"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </label>
+
+              <div className="row-actions" style={{ alignItems: "flex-end" }}>
+                <button className="btn btn-primary" type="submit">
+                  Add Entry
+                </button>
+              </div>
+            </div>
           </form>
-          <div className="muted small">
-            Employee picker arrives with Ameen's employee API; enter the numeric id for
-            now (ids are shown in the list above).
-          </div>
         </div>
       ) : (
-        <div className="card">
-          <div className="row spread">
-            <h3>
-              Correct entry #{editing.id} - {editing.employee_name ?? `employee ${editing.employee_id}`}
+        <div className="card" style={{ padding: 20 }}>
+          <div className="row spread" style={{ marginBottom: 14, alignItems: "center" }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+              Correct Entry #{editing.id} — {editing.employee_name ?? `Employee #${editing.employee_id}`}
             </h3>
-            <div className="row">
-              <span className={`badge badge-${editing.status}`}>{STATUS_LABEL[editing.status]}</span>
-              {editing.is_manual_correction && <span className="muted small">Already a correction</span>}
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <StatusBadge status={editing.status} />
+              {editing.is_manual_correction && <span className="badge badge-muted">Previous correction</span>}
             </div>
           </div>
-          <form className="row" onSubmit={saveCorrection}>
-            <input
-              type="datetime-local"
-              required
-              aria-label="Check in"
-              value={correction.check_in}
-              onChange={(e) => setCorrection({ ...correction, check_in: e.target.value })}
-            />
-            <input
-              type="datetime-local"
-              aria-label="Check out (empty = keep current)"
-              value={correction.check_out}
-              onChange={(e) => setCorrection({ ...correction, check_out: e.target.value })}
-            />
-            <input
-              placeholder="Notes"
-              value={correction.notes}
-              onChange={(e) => setCorrection({ ...correction, notes: e.target.value })}
-            />
-            <button className="btn btn-primary" disabled={saving} type="submit">
-              {saving ? "Saving…" : "Save correction"}
-            </button>
-            <button
-              className="btn btn-ghost"
-              type="button"
-              onClick={() => {
-                setEditing(null);
-                setCorrection(EMPTY_FORM);
-              }}
-            >
-              Cancel
-            </button>
+
+          <form onSubmit={saveCorrection} className="stack" style={{ gap: 14 }}>
+            <div className="form-grid" style={{ marginBottom: 0 }}>
+              <label className="field">
+                <span>Check In Time</span>
+                <input
+                  type="datetime-local"
+                  required
+                  value={correction.check_in}
+                  onChange={(e) => setCorrection({ ...correction, check_in: e.target.value })}
+                />
+              </label>
+
+              <label className="field">
+                <span>Check Out Time</span>
+                <input
+                  type="datetime-local"
+                  value={correction.check_out}
+                  onChange={(e) => setCorrection({ ...correction, check_out: e.target.value })}
+                />
+              </label>
+
+              <label className="field">
+                <span>Notes</span>
+                <input
+                  placeholder="Reason for correction…"
+                  value={correction.notes}
+                  onChange={(e) => setCorrection({ ...correction, notes: e.target.value })}
+                />
+              </label>
+
+              <div className="row-actions" style={{ alignItems: "flex-end" }}>
+                <button className="btn btn-primary" disabled={saving} type="submit">
+                  {saving ? "Saving…" : "Save Correction"}
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={() => {
+                    setEditing(null);
+                    setCorrection(EMPTY_FORM);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </form>
-          <div className="muted small">
-            Saving re-derives worked hours &amp; status from the corrected times and stamps
-            the change as a manual correction (history is never silently rewritten).
-          </div>
         </div>
       )}
     </div>
@@ -469,14 +612,13 @@ function HrAttendance() {
 
 export function AttendancePage() {
   const { user, isHr } = useAuth();
-  if (user === null) return <div className="muted">Loading…</div>;
+  if (user === null) return <div className="muted" style={{ padding: 20 }}>Loading…</div>;
 
   if (!isHr) {
     if (user.employee === null) {
       return (
         <div className="alert alert-error">
-          This account is not linked to an employee - HR must link it before attendance
-          self-service works.
+          This account is not linked to an employee profile — HR must link it before attendance self-service works.
         </div>
       );
     }

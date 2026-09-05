@@ -16,6 +16,7 @@ import { ContractsPage } from "./pages/ContractsPage";
 import { WorkingSchedulesPage } from "./pages/WorkingSchedulesPage";
 import { SalaryStructuresPage } from "./pages/SalaryStructuresPage";
 import { SalaryRulesPage } from "./pages/SalaryRulesPage";
+import { SalaryRuleDetailPage } from "./pages/SalaryRuleDetailPage";
 import { PayrunsPage } from "./pages/PayrunsPage";
 import { PayrunProcessingPage } from "./pages/PayrunProcessingPage";
 import { PayslipsPage } from "./pages/PayslipsPage";
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/payroll/dashboard" element={<PayrollDashboardPage />} />
         <Route path="/payroll/structures" element={<SalaryStructuresPage />} />
         <Route path="/payroll/rules" element={<SalaryRulesPage />} />
+        <Route path="/payroll/rules/:id" element={<SalaryRuleDetailPage />} />
         <Route
           path="/accounts"
           element={

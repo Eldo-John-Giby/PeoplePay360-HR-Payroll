@@ -3,10 +3,10 @@
 CONNECTIONS MAP (read this first):
 - MOUNTED BY: app/main.py (FROZEN, Eldo's) -> prefix="/api/v1/dashboard",
   so every route below is /api/v1/dashboard/... (dashboard and payroll use
-  DIFFERENT prefixes even though they live in one module).
-- WHAT I DO: thin HTTP layer for the six read-only analytics endpoints.
-  Each one: RBAC gate -> pass the shared filter query params to ONE service
-  function -> return the aggregate DTO. NO business logic here.
+  DIFFERENT prefixes even though they live in one module).- WHAT I DO: thin HTTP layer for the eight read-only analytics endpoints.
+    Each one: RBAC gate -> pass the shared filter query params (period /
+    department / employee type / company — AND-composed in service.py) to
+    ONE service function -> return the aggregate DTO. NO business logic here.
 - CALLS: service.py functions get_kpis / get_salary_by_department /
   get_monthly_net_salary_trend / get_attendance_overview /
   get_time_off_overview / get_payroll_alerts. The service layer owns the
@@ -17,9 +17,11 @@ CONNECTIONS MAP (read this first):
   Eldo). This is the module that aggregates ACROSS every other team member's
   tables — the reason the dashboard is "Steve's analytics" slice.
 
-Read-only aggregation endpoints across every module's tables. All endpoints
-share the same filter set (?period_start=&period_end=&department_id=&
-employee_type=) via one shared filter-building helper in service.py.
+Eight read-only aggregation endpoints across every module's tables. All of
+them compose the same AND filters (?period_start=&period_end=&department_id=&
+employee_type=&company_id=) via the shared helpers in service.py
+(_employee_scope_filter / _filtered_employee_ids). /filter-options feeds the
+UI's filter bar with live companies/departments/employee types.
 
 RBAC: payroll data is HR_PAYROLL_USER+ only — EMPLOYEE and HR_MANAGER get 403
 on every dashboard endpoint (arch doc §4.7).
@@ -36,9 +38,11 @@ from app.models.auth import User
 from app.models.enums import EmployeeType
 from app.schemas.payroll import (
     AttendanceOverview,
+    DashboardFilterOptionsResponse,
     KpisResponse,
     MonthlyTrendItem,
     PayrollAlertsResponse,
+    PayslipStatusOverview,
     SalaryByDepartmentItem,
     TimeOffOverview,
 )
@@ -54,6 +58,16 @@ router = APIRouter()
 DASHBOARD_ROLES = require_roles("HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN")
 
 
+@router.get("/filter-options", response_model=DashboardFilterOptionsResponse)
+def filter_options(
+    _: User = Depends(DASHBOARD_ROLES),
+    db: Session = Depends(get_db),
+):
+    """Live option lists (companies / departments / employee types) for the
+    dashboard filter bar — nothing hardcoded on the client."""
+    return service.get_dashboard_filter_options(db)
+
+
 @router.get("/kpis", response_model=KpisResponse)
 def kpis(
     _: User = Depends(DASHBOARD_ROLES),
@@ -62,6 +76,7 @@ def kpis(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """{total_net_salary_paid (paid only), payslips_generated, average_salary,
     approved_time_off_days, attendance_health_pct}."""
@@ -70,7 +85,7 @@ def kpis(
     # spec calls this out as the demo-breaking bug to avoid. average_salary
     # spans computed+validated+paid (a draft isn't a real amount yet).
     return service.get_kpis(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
     )
 
 
@@ -82,13 +97,14 @@ def salary_by_department(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """Bar chart: [{department_name, total_salary (paid net), headcount}]."""
     # headcount = ACTIVE employees per department (from Ameen's employees
     # table); total_salary = sum of PAID net payslips. Two grouped queries
     # merged in the service. Note the return is a bare list (not Page).
     return service.get_salary_by_department(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
     )
 
 
@@ -101,13 +117,14 @@ def monthly_net_salary_trend(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """Line chart: last N months of PAID payruns (missing months -> 0)."""
     # months defaults to 6 (clamped 1-24). Uses date_trunc('month', ...) on
     # period_end and fills months with no paid data as 0 so the line chart
     # never has gaps (see service._add_months for calendar-accurate math).
     return service.get_monthly_net_salary_trend(
-        db, months, period_start, period_end, department_id, employee_type
+        db, months, period_start, period_end, department_id, employee_type, company_id
     )
 
 
@@ -119,6 +136,7 @@ def attendance_overview(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """{present, late, absent (computed), overtime, missing_checkouts,
     manual_edits, coverage_pct}."""
@@ -128,7 +146,7 @@ def attendance_overview(
     # When no period filter is passed the service defaults to the current
     # calendar month so the endpoint is useful out of the box.
     return service.get_attendance_overview(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
     )
 
 
@@ -140,6 +158,7 @@ def time_off_overview(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """{approved_days, pending_requests, balances_by_type} — balances come
     from the live v_time_off_balances view."""
@@ -148,7 +167,7 @@ def time_off_overview(
     # SQL view v_time_off_balances (allocated - taken) — Eldo deliberately
     # keeps leave balances as a view, not a stored column (README §5).
     return service.get_time_off_overview(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
     )
 
 
@@ -160,6 +179,7 @@ def payroll_alerts(
     period_end: date | None = None,
     department_id: int | None = None,
     employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
 ):
     """Open warnings across draft/computed payslips, grouped by type with
     counts + drill-down payslip ids."""
@@ -168,5 +188,22 @@ def payroll_alerts(
     # "open" (validated/paid are resolved/historical). Internal SENT_AT
     # sentinel rows are excluded so they never surface as alerts.
     return service.get_payroll_alerts(
-        db, period_start, period_end, department_id, employee_type
+        db, period_start, period_end, department_id, employee_type, company_id
+    )
+
+
+@router.get("/payslip-status", response_model=PayslipStatusOverview)
+def payslip_status(
+    _: User = Depends(DASHBOARD_ROLES),
+    db: Session = Depends(get_db),
+    period_start: date | None = None,
+    period_end: date | None = None,
+    department_id: int | None = None,
+    employee_type: EmployeeType | None = None,
+    company_id: int | None = None,
+):
+    """Payslip status distribution (paid/validated/computed/draft) + derived
+    unvalidated & with-warnings counts for the 'Payslip Status' panel."""
+    return service.get_payslip_status_overview(
+        db, period_start, period_end, department_id, employee_type, company_id
     )

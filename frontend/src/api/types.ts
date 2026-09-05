@@ -576,10 +576,19 @@ export interface TimeOffBalanceItem {
   remaining: string;
 }
 
+/** One row of the Time Off Overview table (per time-off type). */
+export interface TimeOffTypeOverviewItem {
+  time_off_type_name: string;
+  approved_days: string;
+  pending_requests: number;
+  remaining: string;
+}
+
 export interface TimeOffOverview {
   approved_days: string;
   pending_requests: number;
-  by_type: TimeOffBalanceItem[];
+  balances_by_type: TimeOffBalanceItem[];
+  by_type: TimeOffTypeOverviewItem[];
 }
 
 export interface PayrollAlertItem {
@@ -594,11 +603,27 @@ export interface PayrollAlerts {
   unvalidated_payslips: number;
 }
 
+/** Live payslip lifecycle distribution (paid/validated/computed/draft). */
 export interface PayslipStatusOverview {
-  paid: number;
-  validated: number;
-  computed: number;
   draft: number;
+  computed: number;
+  validated: number;
+  paid: number;
+  cancelled: number;
+  unvalidated: number; // draft + computed — not yet signed off
   with_warnings: number;
-  unvalidated: number;
 }
+
+/** One selectable option in the dashboard filter bar. */
+export interface FilterOption {
+  id: number;
+  name: string;
+  company_id: number | null;
+}
+
+export interface DashboardFilterOptions {
+  companies: FilterOption[];
+  departments: FilterOption[];
+  employee_types: string[];
+}
+

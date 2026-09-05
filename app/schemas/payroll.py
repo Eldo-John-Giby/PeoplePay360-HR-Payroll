@@ -537,6 +537,11 @@ class MonthlyTrendItem(BaseModel):
 
 
 class AttendanceOverview(BaseModel):
+    """Attendance Overview panel: live counts from Ambuj's attendances +
+    schedule-derived absent/coverage. absent = expected schedule days minus
+    attended (no synthetic absent rows exist in the table); manual_edits
+    counts rows stamped is_manual_correction."""
+
     present: int
     late: int
     absent: int
@@ -546,15 +551,48 @@ class AttendanceOverview(BaseModel):
     coverage_pct: float
 
 
+class PayslipStatusOverview(BaseModel):
+    """Payslip Status panel — live distribution of payslip lifecycle states
+    (paid / validated / computed / draft / cancelled) within the filters.
+    unvalidated = draft + computed (money not yet signed off);
+    with_warnings = distinct draft/computed payslips carrying >=1 real (non-
+    SENT_AT-sentinel) warning. Both drive the "Pending / Warning" columns."""
+
+    draft: int = 0
+    computed: int = 0
+    validated: int = 0
+    paid: int = 0
+    cancelled: int = 0
+    unvalidated: int = 0
+    with_warnings: int = 0
+
+
 class TimeOffBalanceItem(BaseModel):
     time_off_type_name: str
     remaining: Decimal
 
 
+class TimeOffTypeOverviewItem(BaseModel):
+    """One row of the Time Off Overview table: per-type approved days (in the
+    period) + pending request count + LIVE remaining balance (from the
+    v_time_off_balances view — never stored). approved_days only sums day-
+    unit types (hour-unit leave can't add into a 'days' number)."""
+
+    time_off_type_name: str
+    approved_days: Decimal
+    pending_requests: int
+    remaining: Decimal
+
+
 class TimeOffOverview(BaseModel):
+    """Time Off Overview: totals + per-type rows. approved_days/pending_requests
+    respect the period + department/type/company filters; remaining balances
+    are the live current balances of the filtered employees."""
+
     approved_days: Decimal
     pending_requests: int
     balances_by_type: list[TimeOffBalanceItem] = Field(default_factory=list)
+    by_type: list[TimeOffTypeOverviewItem] = Field(default_factory=list)
 
 
 class PayrollAlertItem(BaseModel):
@@ -566,7 +604,31 @@ class PayrollAlertItem(BaseModel):
 class PayrollAlertsResponse(BaseModel):
     """Dashboard 'payroll alerts' payload: warnings grouped by type with
     counts + payslip ids to drill into, plus how many draft/computed payslips
-    are currently carrying at least one open warning."""
+    are currently carrying at least one open warning, and the total number of
+    UNVALIDATED payslips (draft/computed — money that still needs to be
+    signed off)."""
 
     alerts: list[PayrollAlertItem] = Field(default_factory=list)
     total_open_payslips: int
+    unvalidated_payslips: int = 0
+
+
+class FilterOptionItem(BaseModel):
+    """One selectable option in the dashboard filter bar (company or
+    department). `company_id` lets the UI disable departments that belong to
+    another company when a company filter is active."""
+
+    id: int
+    name: str
+    company_id: int | None = None
+
+
+class DashboardFilterOptionsResponse(BaseModel):
+    """GET /dashboard/filter-options — the option lists that power the
+    composable filter bar: companies, departments and employee types.
+    Employee types are enum values from the DB enum; companies/departments
+    are live rows (never hardcoded)."""
+
+    companies: list[FilterOptionItem] = Field(default_factory=list)
+    departments: list[FilterOptionItem] = Field(default_factory=list)
+    employee_types: list[str] = Field(default_factory=list)

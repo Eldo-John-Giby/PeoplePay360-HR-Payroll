@@ -5,6 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0',
     port: 5173,
     // Dev convenience: call relative /api/v1 URLs and let Vite forward them
     // to the FastAPI backend (uvicorn on :8000). Override with a real
