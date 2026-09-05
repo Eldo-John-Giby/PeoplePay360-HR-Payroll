@@ -1,5 +1,19 @@
 """Payslip PDF rendering + payslip email (Steve's slice).
 
+CONNECTIONS MAP (read this first):
+- WHO CALLS ME: only `app/modules/payroll/service.py`:
+    * get_payslip_pdf()  -> render_payslip_pdf()   (GET /payslips/{id}/pdf)
+    * send_payslips()    -> get_payslip_pdf() then send_payslip_email()
+      (POST /payruns/{id}/send-payslips)
+- WHAT I CONSUME: plain Python values that the service layer already pulled
+  from the DB (employee, payrun, company, department, payslip rows) — I never
+  open a DB session myself, which keeps rendering pure and unit-testable.
+- WHAT I PRODUCE: `bytes` of an A4 PDF (render_payslip_pdf) and side-effect
+  email sends (send_payslip_email).
+- NO OTHER FILE IN THE REPO imports this module — everything goes through
+  service.py, which also enforces authorization (EMPLOYEE may only fetch
+  their OWN payslip PDF) and per-recipient error handling.
+
 PDF: rendered on-demand with reportlab. A payslip whose status is not 'paid'
 gets a visible diagonal "DRAFT / UNVALIDATED" watermark so HR can preview
 before finalizing (prompt §3.5 edge case).
@@ -43,6 +57,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+# Money formatting used across the PDF tables. Decimal -> thousands-,
+# two-decimal string (e.g. "12,345.00") matching the NUMERIC(12,2) columns.
 def _money(value: Decimal) -> str:
     return f"{value:,.2f}"
 
@@ -68,6 +84,13 @@ def render_payslip_pdf(
 
     `lines`    : iterable of (sequence, code, name, category, amount)
     `warnings` : iterable of (warning_type, message)
+
+    Returns the PDF as in-memory bytes (no temp file) so the caller can
+    stream it (GET /payslips/{id}/pdf) or attach it to an email without any
+    file-system cleanup. Note reportlab's SimpleDocTemplate + Platypus
+    flowables (Paragraph/Table/Spacer) are used for auto-pagination; the
+    watermark is drawn via canvas callbacks (onFirstPage/onLaterPages) so it
+    appears on EVERY page.
     """
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -94,11 +117,18 @@ def render_payslip_pdf(
         "Warn", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#B00020")
     )
 
+    # Prompt §3.5 edge case: HR must be able to PREVIEW a payslip that is
+    # still draft/computed/validated (even one carrying unresolved warnings),
+    # but the document must not be mistaken for a final one. So anything that
+    # is not `paid` gets a diagonal watermark; service.send_payslips() also
+    # refuses to email non-validated runs on top of this visual guard.
     watermark_text = ""
     if status != PayrunStatus.paid:
         watermark_text = "DRAFT / UNVALIDATED"
 
     def _watermark(cv: canvas.Canvas):
+        # Drawn light-grey (#DDDDDD) at 35deg across the page center — visible
+        # enough to notice, light enough to keep the tables readable.
         if watermark_text:
             cv.saveState()
             cv.setFont("Helvetica-Bold", 48)
@@ -108,6 +138,11 @@ def render_payslip_pdf(
             cv.drawCentredString(0, 0, watermark_text)
             cv.restoreState()
 
+    # Styles/geometry live at the top of this function so the layout is
+    # tweakable in one place: A4 page, mm-based margins, bold money columns,
+    # grey header row, subtle grid lines — deliberately plain so the PDF
+    # reads like a real payslip. `story` is the list of Platypus flowables
+    # that SimpleDocTemplate lays out (auto-paginated) below.
     story: list = []
 
     story.append(Paragraph(f"{company_name}", title_style))
@@ -117,6 +152,8 @@ def render_payslip_pdf(
     ))
     story.append(Spacer(1, 6))
 
+    # Employee identity block (top table): who this payslip belongs to +
+    # worked days. All values were passed in by service.get_payslip_pdf().
     emp_data = [
         ["Employee", employee_name],
         ["Email", employee_email],
@@ -137,6 +174,9 @@ def render_payslip_pdf(
     story.append(Spacer(1, 6))
 
     story.append(Paragraph("Earnings & Deductions", h2_style))
+    # Earnings & deductions breakdown — one row per EngineLine/rule snapshot
+    # (sequence, code, name, category, amount) persisted in payslip_lines.
+    # The Amount column is right-aligned for a clean money column.
     header = ["#", "Code", "Description", "Category", "Amount (INR)"]
     rows = [header]
     for seq, code, name, category, amount in lines:
@@ -198,6 +238,12 @@ def render_payslip_pdf(
 
 
 def _smtp_config() -> dict:
+    """Read SMTP settings straight from the environment.
+
+    Why env vars and not app.core.config.settings? config.py is Eldo's
+    frozen file; adding fields there would touch his ownership. Reading
+    os.environ keeps this file self-contained and demo-friendly (set the
+    vars at runtime, no code change)."""
     return {
         "host": os.environ.get("SMTP_HOST"),
         "port": int(os.environ.get("SMTP_PORT", "587")),
@@ -217,7 +263,15 @@ def send_payslip_email(
     pdf_bytes: bytes,
 ) -> None:
     """Send one payslip email. Raises on failure; the service layer catches
-    per-recipient so one bad address never aborts the batch."""
+    per-recipient so one bad address never aborts the batch.
+
+    Connected to: service.send_payslips() — one call per payslip inside its
+    loop. Reads SMTP_* from the environment (NOT config.py, which is Eldo's
+    frozen file). If SMTP_HOST is unset it logs the email to the console and
+    returns normally ("console transport") so the demo and tests pass
+    without an SMTP server. Raising lets the service layer record a per-
+    employee send failure instead of failing the whole batch.
+    """
     config = _smtp_config()
     subject = f"Payslip {period_start} — {period_end} ({payrun_name})"
     body = (
@@ -229,12 +283,18 @@ def send_payslip_email(
 
     if not config["host"]:
         # Console transport — keeps local dev + tests working without SMTP.
+        # The email is "sent" from the demo's perspective: logged, no error.
+        # Swap in real SMTP_HOST/SMTP_* env vars on demo day for a live send.
         logger.info(
             "[console-email] To: %s | Subject: %s | PDF bytes: %d",
             to_email, subject, len(pdf_bytes),
         )
         return
 
+    # Real SMTP path: multipart/alternative MIME message with the payslip
+    # PDF attached. MIMEApplication marks the payload as application/pdf so
+    # clients open it inline. Errors here propagate to the caller (the
+    # service loop records them per employee).
     msg = MIMEMultipart()
     msg["Subject"] = subject
     msg["From"] = config["from_addr"]
@@ -246,6 +306,8 @@ def send_payslip_email(
     )
     msg.attach(attachment)
 
+    # smtplib with a 15s timeout so a dead mail server can't hang the whole
+    # bulk-send batch; starttls + optional login cover typical SMTP hosts.
     with smtplib.SMTP(config["host"], config["port"], timeout=15) as server:
         server.starttls()
         if config["username"]:
