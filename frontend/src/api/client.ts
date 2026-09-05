@@ -108,7 +108,7 @@ async function request<T>(
 
   if (res.status === 401) {
     logout();
-    throw new ApiError(401, "Session expired — please log in again.");
+    throw new ApiError(401, "Session expired - please log in again.");
   }
 
   const text = await res.text();
@@ -151,7 +151,7 @@ export function fetchMe(): Promise<Me> {
 }
 
 // ---------------------------------------------------------------------------
-// User management (ADMIN only — the backend has no public self-signup; HR/
+// User management (ADMIN only - the backend has no public self-signup; HR/
 // admin provisions accounts, optionally linked to an existing employee).
 // ---------------------------------------------------------------------------
 
@@ -236,7 +236,7 @@ export function createManualAttendance(payload: {
 }
 
 /** HR correction of an existing entry (re-derives hours/status, stamps it
- * as a manual correction). All fields optional — only changed ones send. */
+ * as a manual correction). All fields optional - only changed ones send. */
 export function updateAttendance(
   attendanceId: number,
   payload: {
@@ -340,7 +340,7 @@ export function listBalances(
 }
 
 // ---------------------------------------------------------------------------
-// Employees / org (Ameen's slice) — call his REST surface, but surface a
+// Employees / org (Ameen's slice) - call his REST surface, but surface a
 // clear "API not available yet" state when it 404s so the demo doesn't break.
 // ---------------------------------------------------------------------------
 
@@ -445,7 +445,7 @@ export function cancelRequest(id: number): Promise<TimeOffRequest> {
 }
 
 // ---------------------------------------------------------------------------
-// Organization — departments / job positions (Ameen's slice)
+// Organization - departments / job positions (Ameen's slice)
 // ---------------------------------------------------------------------------
 
 export function listDepartments(): Promise<Page<DepartmentSummary>> {
@@ -486,7 +486,7 @@ export function getContract(id: number): Promise<Contract> {
   return request<Contract>("GET", `/contracts/${id}`);
 }
 
-/** EMPLOYEE self-service — the logged-in user's own contract history. */
+/** EMPLOYEE self-service - the logged-in user's own contract history. */
 export function listMyContracts(): Promise<Contract[]> {
   return request<Contract[]>("GET", "/employees/me/contracts");
 }
@@ -565,7 +565,7 @@ export function replaceWorkingScheduleLines(
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — salary rules & structures (Steve's slice)
+// Payroll - salary rules & structures (Steve's slice)
 // ---------------------------------------------------------------------------
 
 export function listSalaryRules(): Promise<Page<SalaryRule>> {
@@ -624,7 +624,7 @@ export function replaceSalaryStructureRules(
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — payruns (wizard + lifecycle)
+// Payroll - payruns (wizard + lifecycle)
 // ---------------------------------------------------------------------------
 
 export function draftPayrunScope(scope: PayrunScope): Promise<DraftScopeResponse> {
@@ -672,7 +672,7 @@ export function sendPayslips(id: number): Promise<SendPayslipsResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — payslips
+// Payroll - payslips
 // ---------------------------------------------------------------------------
 
 export function listPayslips(
@@ -693,17 +693,25 @@ export function listMyPayslips(): Promise<Page<PayslipSummaryItem>> {
 
 export function getPayslip(id: number): Promise<PayslipDetail> {
   return request<PayslipDetail>("GET", `/payroll/payslips/${id}`);
-}
-
-// ---------------------------------------------------------------------------
+}// ---------------------------------------------------------------------------
 // Dashboard (Steve's slice)
 // ---------------------------------------------------------------------------
-
 export interface DashboardFilters {
   period_start?: string;
   period_end?: string;
   department_id?: number;
   employee_type?: string;
+  company_id?: number;
+}
+
+export interface DashboardFilterOptions {
+  companies: { id: number; name: string }[];
+  departments: { id: number; name: string; company_id: number }[];
+  employee_types: string[];
+}
+
+export function getDashboardFilterOptions(): Promise<DashboardFilterOptions> {
+  return request<DashboardFilterOptions>("GET", "/dashboard/filter-options");
 }
 
 export function getDashboardKpis(
@@ -761,8 +769,17 @@ export function getPayrollAlerts(
   );
 }
 
+export function getPayslipStatus(
+  filters: DashboardFilters = {},
+): Promise<PayslipStatusOverview> {
+  return request<PayslipStatusOverview>(
+    "GET",
+    `/dashboard/payslip-status${queryString({ ...filters })}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Auth — role assignment (ADMIN)
+// Auth - role assignment (ADMIN)
 // ---------------------------------------------------------------------------
 
 export function updateUserRoles(

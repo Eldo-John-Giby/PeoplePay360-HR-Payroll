@@ -241,7 +241,7 @@ export function PayrunProcessingPage() {
             onClick={() => void act("validate")}
             title={
               blockingCount > 0
-                ? `Blocked by ${blockingCount} blocking warning(s) — resolve them first`
+                ? `Blocked by ${blockingCount} blocking warning(s) - resolve them first`
                 : "Validate payslips (blocked while blocking warnings are open)"
             }
           >
@@ -276,7 +276,7 @@ export function PayrunProcessingPage() {
 
         {isLocked && (
           <p className="muted small" style={{ marginTop: 8 }}>
-            🔒 This run is {status === "paid" ? "paid" : "cancelled"} and locked — it&apos;s a
+            🔒 This run is {status === "paid" ? "paid" : "cancelled"} and locked - it&apos;s a
             historical record. No further edits are allowed.
           </p>
         )}
@@ -286,19 +286,19 @@ export function PayrunProcessingPage() {
       {warnings.length > 0 && (
         <div className="card warn-panel">
           <h3 style={{ fontSize: 13 }}>
-            ⚠️ Warnings — {warnings.length} open on this run
+            ⚠️ Warnings - {warnings.length} open on this run
           </h3>
           <ul className="warn-list">
             {warnings.map((w, i) => (
               <li key={i}>
-                <b>{w.employee_name}</b> — {w.message}
+                <b>{w.employee_name}</b> - {w.message}
               </li>
             ))}
           </ul>
           {blockingCount > 0 && (
             <p className="small" style={{ marginTop: 8 }}>
               <b>{blockingCount}</b> blocking warning(s) open (missing contract / negative
-              net) — <b>Validate</b> stays disabled until they&apos;re resolved.
+              net) - <b>Validate</b> stays disabled until they&apos;re resolved.
             </p>
           )}
         </div>
@@ -331,7 +331,7 @@ export function PayrunProcessingPage() {
             {slips.map((s) => (
               <tr key={s.id}>
                 <td><b>{s.employee_name}</b></td>
-                <td>—</td>
+                <td>-</td>
                 <td>{fmtMoney(s.gross_salary)}</td>
                 <td><b>{fmtMoney(s.net_salary)}</b></td>
                 <td>
@@ -343,7 +343,7 @@ export function PayrunProcessingPage() {
                   {s.warning_count > 0 ? (
                     <span className="badge badge-missing_checkout">⚠ {s.warning_count}</span>
                   ) : (
-                    <span className="muted small">—</span>
+                    <span className="muted small">-</span>
                   )}
                 </td>
                 <td className="row-actions">
@@ -356,14 +356,14 @@ export function PayrunProcessingPage() {
             {slips.length === 0 && (
               <tr>
                 <td colSpan={7} className="muted">
-                  No payslips yet — press <b>Compute</b> to generate them.
+                  No payslips yet - press <b>Compute</b> to generate them.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
         <p className="muted small" style={{ marginTop: 8 }}>
-          Worked days come from attendance + approved time off for the period — visible on
+          Worked days come from attendance + approved time off for the period - visible on
           each payslip&apos;s detail page.
         </p>
       </div>

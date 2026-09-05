@@ -239,7 +239,7 @@ export function SalaryStructuresPage() {
 
           <h3 style={{ fontSize: 13 }}>Salary rules (in computation order)</h3>
           {included.length === 0 && (
-            <p className="muted small">No rules yet — add the first one below.</p>
+            <p className="muted small">No rules yet - add the first one below.</p>
           )}
           <table className="table" style={{ marginBottom: 10 }}>
             <tbody>
@@ -310,7 +310,7 @@ export function SalaryStructuresPage() {
 
           <div className="row spread" style={{ marginTop: 14 }}>
             <p className="muted small">
-              Rules run top to bottom — Basic first, then allowances, Gross, Deductions, Net.
+              Rules run top to bottom - Basic first, then allowances, Gross, Deductions, Net.
             </p>
             <div className="row">
               <button className="btn btn-ghost" type="button" onClick={startNew}>

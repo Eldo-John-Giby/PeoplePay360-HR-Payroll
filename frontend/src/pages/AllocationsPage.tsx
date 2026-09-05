@@ -81,7 +81,7 @@ export function AllocationsPage() {
         allocated_amount: "",
         valid_to: "",
       }));
-      setNotice("Allocation created — pending approval. Approve it from the list below.");
+      setNotice("Allocation created - pending approval. Approve it from the list below.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create allocation.");

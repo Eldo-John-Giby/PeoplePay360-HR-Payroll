@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchMe()
       .then(setUser)
       .catch(() => {
-        // Bad/expired token — drop it and send the user to the login screen.
+        // Bad/expired token - drop it and send the user to the login screen.
         apiLogout();
       })
       .finally(() => setLoading(false));
@@ -90,22 +90,40 @@ export function useAuth(): AuthContextValue {
 // Small formatting helpers used across pages
 // ---------------------------------------------------------------------------
 
+export function fmtMoney(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+export function fmtNum(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return n.toLocaleString("en-IN");
+}
+
 export function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
 }
 
 export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString();
 }
 
 export function fmtHours(value: string | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const n = Number(value);
   return Number.isNaN(n) ? value : `${n.toFixed(2)} h`;
 }

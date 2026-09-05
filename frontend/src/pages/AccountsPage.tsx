@@ -178,9 +178,9 @@ export function AccountsPage() {
     <div>
       <h2>Accounts</h2>
       <p className="muted">
-        Provision and manage logins (ADMIN only — there is no public
+        Provision and manage logins (ADMIN only - there is no public
         self-signup; HR hands out credentials). An EMPLOYEE account must be
-        linked to an employee profile before attendance self-service works —
+        linked to an employee profile before attendance self-service works -
         link it here or at creation.
       </p>
 
@@ -229,7 +229,7 @@ export function AccountsPage() {
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLES.map((r) => (
                 <option key={r.name} value={r.name}>
-                  {r.name} — {r.desc}
+                  {r.name} - {r.desc}
                 </option>
               ))}
             </select>
@@ -243,7 +243,7 @@ export function AccountsPage() {
                 min={1}
                 value={linkOnCreate}
                 onChange={(e) => setLinkOnCreate(e.target.value)}
-                placeholder="Directory unavailable — enter id"
+                placeholder="Directory unavailable - enter id"
               />
             ) : (
               <select
@@ -360,7 +360,7 @@ export function AccountsPage() {
         )}
         {directoryDown && (
           <p className="muted">
-            Employee directory unavailable — link by employee id is not shown.
+            Employee directory unavailable - link by employee id is not shown.
           </p>
         )}
       </div>

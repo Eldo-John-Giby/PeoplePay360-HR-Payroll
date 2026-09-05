@@ -134,16 +134,16 @@ export function EmployeesPage() {
                   <div className="muted small">{e.work_email}</div>
                 </td>
                 <td>
-                  {e.department_name ?? "—"}
+                  {e.department_name ?? "-"}
                   <div className="muted small">{e.job_position_name ?? ""}</div>
                 </td>
-                <td>{e.employee_type ? (TYPE_BADGE[e.employee_type] ?? e.employee_type) : "—"}</td>
+                <td>{e.employee_type ? (TYPE_BADGE[e.employee_type] ?? e.employee_type) : "-"}</td>
                 <td>
                   <span className={`badge badge-${e.status ?? "active"}`}>
                     {e.status ?? "active"}
                   </span>
                 </td>
-                <td>{e.date_of_joining ? fmtDate(e.date_of_joining) : "—"}</td>
+                <td>{e.date_of_joining ? fmtDate(e.date_of_joining) : "-"}</td>
               </tr>
             ))}
             {visible.length === 0 && (
@@ -162,15 +162,15 @@ export function EmployeesPage() {
             <div className="muted small">{selected.work_email}</div>
             <dl className="kv">
               <dt>Department</dt>
-              <dd>{selected.department_name ?? "—"}</dd>
+              <dd>{selected.department_name ?? "-"}</dd>
               <dt>Role</dt>
-              <dd>{selected.job_position_name ?? "—"}</dd>
+              <dd>{selected.job_position_name ?? "-"}</dd>
               <dt>Type</dt>
-              <dd>{selected.employee_type ?? "—"}</dd>
+              <dd>{selected.employee_type ?? "-"}</dd>
               <dt>Status</dt>
-              <dd>{selected.status ?? "—"}</dd>
+              <dd>{selected.status ?? "-"}</dd>
               <dt>Joined</dt>
-              <dd>{selected.date_of_joining ? fmtDate(selected.date_of_joining) : "—"}</dd>
+              <dd>{selected.date_of_joining ? fmtDate(selected.date_of_joining) : "-"}</dd>
             </dl>
             <div className="row">
               <Link className="btn btn-primary btn-sm" to={`/attendance?employee=${selected.id}`}>

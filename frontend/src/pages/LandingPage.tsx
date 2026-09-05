@@ -201,7 +201,7 @@ function AttendanceShot() {
             date="Today · 09:21 → open"
             badge="Late"
             tone="warn"
-            hours="—"
+            hours="-"
           />
           <FakeRow
             name="Aarav Mehta"
@@ -215,7 +215,7 @@ function AttendanceShot() {
             date="Yesterday · 09:03 → open"
             badge="Missing check-out"
             tone="danger"
-            hours="—"
+            hours="-"
           />
         </div>
       </div>
@@ -233,7 +233,7 @@ function TimeOffShot() {
             <span className="ld-avatar">J</span>
             <div className="ld-fname">
               <b>John D&#39;Souza</b>
-              <span>Paid Time Off · Aug 12 – 14</span>
+              <span>Paid Time Off · Aug 12 - 14</span>
             </div>
             <span className="ld-chip ld-chip-warn">To approve</span>
           </div>
@@ -283,7 +283,7 @@ function TimeOffShot() {
               <i style={{ width: "90%" }} />
             </div>
           </div>
-          <p className="ld-note">Balances are always computed live — nothing pre-deducted.</p>
+          <p className="ld-note">Balances are always computed live - nothing pre-deducted.</p>
         </div>
       </div>
     </WindowFrame>
@@ -308,7 +308,7 @@ const FEATURES = [
   {
     icon: I.scale,
     title: "Live balances",
-    text: "Allocated minus taken — computed from approved data on every read. Never drifts.",
+    text: "Allocated minus taken - computed from approved data on every read. Never drifts.",
   },
   {
     icon: I.check,
@@ -323,7 +323,7 @@ const FEATURES = [
   {
     icon: I.users,
     title: "Employee directory",
-    text: "The whole team in one place — profile, department, schedule and linked account.",
+    text: "The whole team in one place - profile, department, schedule and linked account.",
   },
 ];
 
@@ -335,8 +335,8 @@ const CHECKS_A = [
 ];
 
 const CHECKS_B = [
-  "Request time off in the type's own unit — days or hours",
-  "Approve or refuse with balance checks built in — no negative leave",
+  "Request time off in the type's own unit - days or hours",
+  "Approve or refuse with balance checks built in - no negative leave",
   "Overlapping requests are caught before they're approved",
   "Grant and approve allocations; expiry windows never count twice",
 ];
@@ -354,9 +354,6 @@ export function LandingPage() {
       {/* Top navigation -------------------------------------------------- */}
       <header className="ld-nav">
         <Link to="/" className="ld-brand">
-          <span className="ld-brand-mark">
-            <Icon size={16}>{I.logo}</Icon>
-          </span>
           PeoplePay360
         </Link>
         <nav className="ld-links">
@@ -367,10 +364,6 @@ export function LandingPage() {
         <div className="ld-nav-cta">
           <Link className="ld-login" to="/login">
             Log in
-          </Link>
-          <Link className="ld-btn ld-btn-dark" to="/login">
-            Open the demo
-            <Icon size={16}>{I.arrow}</Icon>
           </Link>
         </div>
       </header>
@@ -383,18 +376,18 @@ export function LandingPage() {
             Attendance, time off &amp; employee self-service
           </span>
           <h1>
-            Your people, their hours —
+            Your people, their hours -
             <br />
             <em>all in one place.</em>
           </h1>
           <p className="ld-lead">
             PeoplePay360 is the HR console for attendance tracking and time-off
             management. Check in, ask for leave, approve requests and watch live
-            balances — without a single spreadsheet.
+            balances - without a single spreadsheet.
           </p>
           <div className="ld-hero-cta">
             <Link className="ld-btn ld-btn-dark" to="/login">
-              Start now — it&apos;s free
+              Start now - it&apos;s free
               <Icon size={16}>{I.arrow}</Icon>
             </Link>
             <a className="ld-btn ld-btn-ghost" href="#features">
@@ -418,7 +411,7 @@ export function LandingPage() {
             <span className="ld-kicker">Attendance</span>
             <h2>Every hour, accounted for.</h2>
             <p>
-              Check in when you arrive, check out when you leave — PeoplePay360
+              Check in when you arrive, check out when you leave - PeoplePay360
               derives the rest. Late? Overtime? Missing check-out? Each status is
               computed from the employee&apos;s own working schedule, never guessed.
             </p>
@@ -449,7 +442,7 @@ export function LandingPage() {
             <h2>Leave without the spreadsheet chase.</h2>
             <p>
               Employees request leave in the type&apos;s own unit. HR approves or
-              refuses against a balance that&apos;s always live — so approving a
+              refuses against a balance that&apos;s always live - so approving a
               request can never push a team member into negative leave.
             </p>
             <ul className="ld-checks">
@@ -491,8 +484,8 @@ export function LandingPage() {
           <div className="ld-quote-card">
             <span className="ld-quote-mark">“</span>
             <p>
-              Everything a people team needs for the day-to-day — attendance
-              flags, approvals, balances — actually works end to end. That&apos;s
+              Everything a people team needs for the day-to-day - attendance
+              flags, approvals, balances - actually works end to end. That&apos;s
               rare in an HR tool.
             </p>
             <div className="ld-quote-who">
@@ -512,7 +505,7 @@ export function LandingPage() {
           <h2>Ready to run HR without the guesswork?</h2>
           <p>Sign in with a demo account for any role and click through the full flow.</p>
           <Link className="ld-btn ld-btn-dark ld-btn-lg" to="/login">
-            Start now — it&apos;s free
+            Start now - it&apos;s free
             <Icon size={17}>{I.arrow}</Icon>
           </Link>
           <p className="ld-cta-note">
@@ -525,9 +518,6 @@ export function LandingPage() {
       <footer className="ld-footer">
         <div className="ld-footer-inner">
           <Link to="/" className="ld-brand">
-            <span className="ld-brand-mark">
-              <Icon size={16}>{I.logo}</Icon>
-            </span>
             PeoplePay360
           </Link>
           <div className="ld-footer-cols">

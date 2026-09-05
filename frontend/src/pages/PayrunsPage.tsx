@@ -60,7 +60,7 @@ export function PayrunsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Wizard state (stateless — no row is created until step 2 finishes)
+  // Wizard state (stateless - no row is created until step 2 finishes)
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [scopeForm, setScopeForm] = useState<ScopeForm>(EMPTY_SCOPE);
@@ -176,7 +176,7 @@ export function PayrunsPage() {
         employee_ids: [...selected],
       });
       closeWizard();
-      setNotice(`Payrun "${created.name}" created — open it to compute payslips.`);
+      setNotice(`Payrun "${created.name}" created - open it to compute payslips.`);
       await load();
       navigate(`/payroll/payruns/${created.id}`);
     } catch (err) {
@@ -201,7 +201,7 @@ export function PayrunsPage() {
       {wizardOpen && (
         <div className="wizard card">
           <div className="wizard-head">
-            <h3>New payrun — step {step} of 2</h3>
+            <h3>New payrun - step {step} of 2</h3>
             <button className="btn btn-ghost btn-sm" onClick={closeWizard} disabled={busy}>
               ✕ Close
             </button>
@@ -262,7 +262,7 @@ export function PayrunsPage() {
                   type="text"
                   value={scopeForm.name}
                   onChange={(e) => setScopeForm({ ...scopeForm, name: e.target.value })}
-                  placeholder="e.g. Payrun — October 2026"
+                  placeholder="e.g. Payrun - October 2026"
                 />
               </label>
               <div className="row align-end">
@@ -389,7 +389,7 @@ export function PayrunsPage() {
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={7} className="muted">No payruns yet — create your first one.</td>
+              <td colSpan={7} className="muted">No payruns yet - create your first one.</td>
             </tr>
           )}
         </tbody>

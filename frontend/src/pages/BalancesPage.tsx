@@ -61,7 +61,7 @@ export function BalancesPage() {
   return (
     <div className="stack">
       <div className="row spread">
-        <h2>{isHr ? "Time off balances — all employees" : "My time off balances"}</h2>
+        <h2>{isHr ? "Time off balances - all employees" : "My time off balances"}</h2>
         {isHr && (
           <input
             type="number"
@@ -73,7 +73,7 @@ export function BalancesPage() {
       </div>
       {error && <div className="alert alert-error">{error}</div>}
       <p className="muted small">
-        Balances are computed live from approved allocations minus approved requests —
+        Balances are computed live from approved allocations minus approved requests -
         never a stored total.
       </p>
       <BalanceTable rows={rows} />

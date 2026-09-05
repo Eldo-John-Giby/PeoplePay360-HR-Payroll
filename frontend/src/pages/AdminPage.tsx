@@ -77,7 +77,7 @@ export function AdminPage() {
           </thead>
           <tbody>
             {users.map((u) => {
-              const current = u.roles[0]?.name ?? "—";
+              const current = u.roles[0]?.name ?? "-";
               return (
                 <tr key={u.id}>
                   <td><b>{u.email}</b></td>

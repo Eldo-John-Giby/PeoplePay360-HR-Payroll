@@ -87,7 +87,7 @@ export function PayslipsPage() {
                 {p.warning_count > 0 ? (
                   <span className="badge badge-missing_checkout">⚠ {p.warning_count}</span>
                 ) : (
-                  <span className="muted small">—</span>
+                  <span className="muted small">-</span>
                 )}
               </td>
               <td className="row-actions">
@@ -106,7 +106,7 @@ export function PayslipsPage() {
       </table>
       {isMine && (
         <p className="muted small">
-          You see your own payslips only — payroll roles see everyone&apos;s.
+          You see your own payslips only - payroll roles see everyone&apos;s.
         </p>
       )}
     </div>

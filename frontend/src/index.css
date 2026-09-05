@@ -59,10 +59,14 @@ body {
   align-items: center;
   gap: 24px;
   padding: 0 24px;
-  background: #16121b;
-  color: #fff;
+  background: #ffffff;
+  color: var(--ink);
   min-height: 58px;
   flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 40;
 }
 
 .brand {
@@ -75,19 +79,6 @@ body {
   white-space: nowrap;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--brand), #4a2f42);
-  flex-shrink: 0;
-}
-
 .nav {
   display: flex;
   gap: 4px;
@@ -96,7 +87,7 @@ body {
 }
 
 .nav-item {
-  color: #cdd5e0;
+  color: #374151;
   text-decoration: none;
   padding: 6px 10px;
   border-radius: 6px;
@@ -104,13 +95,14 @@ body {
 }
 
 .nav-item:hover {
-  color: #fff;
-  background: rgb(255 255 255 / 8%);
+  color: var(--brand-dark);
+  background: var(--brand-tint);
 }
 
 .nav-item.active {
-  background: rgb(255 255 255 / 14%);
-  color: #fff;
+  background: var(--brand-tint);
+  color: var(--brand-dark);
+  font-weight: 600;
 }
 
 .nav-item.nav-disabled {
@@ -137,7 +129,7 @@ body {
 
 .user-roles {
   display: block;
-  color: #9aa4b2;
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -426,40 +418,30 @@ select:focus {
   white-space: nowrap;
 }
 
+/* Status badges are plain text - no pill, no color coding. */
+
 .badge-present,
 .badge-ok,
 .badge-req-approved,
-.badge-alloc-approved {
-  background: var(--ok-bg);
-  color: var(--ok);
-}
-
+.badge-alloc-approved,
 .badge-late,
 .badge-req-to_approve,
 .badge-alloc-to_approve,
 .badge-req-draft,
-.badge-alloc-draft {
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
-.badge-overtime {
-  background: #e8f0fe;
-  color: var(--brand);
-}
-
+.badge-alloc-draft,
+.badge-overtime,
 .badge-missing_checkout,
 .badge-absent,
 .badge-req-refused,
-.badge-alloc-refused {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-
+.badge-alloc-refused,
 .badge-req-cancelled,
-.badge-muted {
-  background: #eef0f4;
-  color: var(--muted);
+.badge-muted,
+.badge-warn {
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  border-radius: 0;
+  font-weight: 500;
 }
 
 /* Employee directory ------------------------------------------------------ */
@@ -500,135 +482,7 @@ select:focus {
     #f7f5f7;
 }
 
-/* Left sidebar ------------------------------------------------------------ */
-
-.login-side {
-  width: 360px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-  padding: 32px 28px;
-  color: #fff;
-  background:
-    radial-gradient(500px 300px at 90% -10%, rgb(163 127 151 / 35%), transparent 60%),
-    linear-gradient(165deg, #16121b 0%, #241b2c 55%, #3a2436 100%);
-}
-
-.login-side .login-brand {
-  color: #fff;
-}
-
-.login-side .login-brand:hover {
-  color: #e6c3d5;
-}
-
-.login-side-body h2 {
-  font-size: 26px;
-  line-height: 1.2;
-  letter-spacing: -0.5px;
-  margin: 0 0 14px;
-}
-
-.login-side-body p {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #c7cdd8;
-  margin: 0 0 20px;
-}
-
-.login-features {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 12px;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: #e5e7eb;
-}
-
-.login-features li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.login-features li::before {
-  content: "✓";
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  background: rgb(113 75 103 / 55%);
-  color: #fff;
-}
-
-.login-side-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.login-side .login-home {
-  color: #e6c3d5;
-}
-
-.login-side .login-home:hover {
-  color: #fff;
-}
-
-.login-side-note {
-  font-size: 12px;
-  color: #8a94a4;
-}
-
-/* Shared brand + right panel --------------------------------------------- */
-
-.login-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: -0.2px;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.login-brand:hover {
-  color: var(--brand);
-}
-
-.login-home {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.login-home:hover {
-  color: var(--brand);
-}
-
-.login-mark {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  color: #fff;
-  font-size: 19px;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--brand), #4a2f42);
-  box-shadow: 0 6px 16px rgb(113 75 103 / 40%);
-  flex-shrink: 0;
-}
+/* Login panel -------------------------------------------------------------- */
 
 .login-wrap {
   flex: 1;
@@ -655,14 +509,6 @@ select:focus {
   margin-bottom: 6px;
 }
 
-.login-card-head .login-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  font-size: 26px;
-  margin: 0 auto 14px;
-}
-
 .login-card-head h1 {
   font-size: 24px;
   letter-spacing: -0.4px;
@@ -673,90 +519,89 @@ select:focus {
   font-size: 13px;
 }
 
-.login-divider {
-  display: flex;
+
+/* Payroll dropdown (main nav) ---------------------------------------------- */
+
+.nav-dropdown {
+  position: relative;
+}
+
+.nav-dropdown-btn {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
+  gap: 5px;
+  color: #374151;
 }
 
-.login-divider::before,
-.login-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line);
+.nav-dropdown-btn:hover {
+  color: var(--brand-dark);
+  background: var(--brand-tint);
 }
 
-.demo-hints {
+.nav-dropdown-btn.active {
+  background: var(--brand-tint);
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+.caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgb(17 24 39 / 16%);
+  padding: 6px;
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
 }
 
-.demo-chip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-weight: 400;
-  font-size: 12px;
-  text-align: left;
-  padding: 9px 14px;
-  border-radius: 10px;
+.dropdown-item {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 7px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 13px;
 }
 
-.demo-chip:hover:not(:disabled) {
-  border-color: var(--brand);
+.dropdown-item:hover {
   background: var(--brand-tint);
+  color: var(--brand-dark);
 }
 
-.chip-role {
-  font-weight: 700;
-  font-size: 11px;
-  color: var(--brand);
+.dropdown-item.active {
   background: var(--brand-tint);
-  padding: 3px 8px;
-  border-radius: 100px;
+  color: var(--brand-dark);
+  font-weight: 600;
 }
 
-.chip-email {
+.dropdown-label {
   color: var(--muted);
-}
-
-/* Sub-navigation (payroll) ------------------------------------------------ */
-
-.subnav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 24px;
-  background: #1d1822;
-  border-bottom: 1px solid rgb(255 255 255 / 6%);
-  flex-wrap: wrap;
-}
-
-.subnav .nav-item {
-  color: #b3a9b8;
-  font-size: 12.5px;
-}
-
-.subnav-label {
-  color: #7d7183;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.7px;
-  padding: 0 8px;
+  padding: 6px 12px 3px;
 }
 
-.subnav-sep {
-  width: 1px;
-  height: 18px;
-  background: rgb(255 255 255 / 12%);
-  margin: 0 8px;
+.dropdown-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 4px;
 }
 
 /* Wizard ------------------------------------------------------------------- */
@@ -866,13 +711,6 @@ select:focus {
   color: #fff;
 }
 
-/* Payrun status badge tweaks ---------------------------------------------- */
-
-.badge-warn {
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
 .metric b.ok {
   color: var(--ok);
 }
@@ -892,26 +730,8 @@ select:focus {
 }
 
 @media (max-width: 860px) {
-  .login-page {
-    flex-direction: column;
-  }
-
-  .login-side {
-    width: 100%;
-    gap: 20px;
-    padding: 24px 22px;
-  }
-
-  .login-side-body h2 {
-    font-size: 22px;
-  }
-
-  .login-features {
-    display: none;
-  }
-
-  .login-side-foot {
-    margin-top: 0;
+  .login-wrap {
+    padding: 16px;
   }
 }
 
@@ -921,9 +741,7 @@ select:focus {
   }
 
   .topbar,
-  .subnav,
-  .btn,
-  .login-side {
+  .btn {
     display: none !important;
   }
 

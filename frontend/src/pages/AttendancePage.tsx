@@ -235,7 +235,7 @@ function HrAttendance() {
     setNotice(null);
     try {
       const res = await sweepMissingCheckouts();
-      setNotice(`Sweep complete — ${res.swept} open entries marked as missing checkout.`);
+      setNotice(`Sweep complete - ${res.swept} open entries marked as missing checkout.`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Sweep failed.");
@@ -298,7 +298,7 @@ function HrAttendance() {
         notes?: string | null;
       } = {};
       // Always send what the user sees so the result is WYSIWYG; sending an
-      // empty check_out would REOPEN a closed row, which is not allowed — the
+      // empty check_out would REOPEN a closed row, which is not allowed - the
       // backend treats unset as "unchanged", so only include it when filled.
       if (correction.check_in) changed.check_in = naiveIso(correction.check_in);
       if (correction.check_out) changed.check_out = naiveIso(correction.check_out);
@@ -319,7 +319,7 @@ function HrAttendance() {
   return (
     <div className="stack">
       <div className="row spread">
-        <h2>Attendance — all employees</h2>
+        <h2>Attendance - all employees</h2>
         <button className="btn btn-ghost" onClick={() => void onSweep()}>
           Run missing-checkout sweep
         </button>
@@ -417,7 +417,7 @@ function HrAttendance() {
         <div className="card">
           <div className="row spread">
             <h3>
-              Correct entry #{editing.id} — {editing.employee_name ?? `employee ${editing.employee_id}`}
+              Correct entry #{editing.id} - {editing.employee_name ?? `employee ${editing.employee_id}`}
             </h3>
             <div className="row">
               <span className={`badge badge-${editing.status}`}>{STATUS_LABEL[editing.status]}</span>
@@ -475,7 +475,7 @@ export function AttendancePage() {
     if (user.employee === null) {
       return (
         <div className="alert alert-error">
-          This account is not linked to an employee — HR must link it before attendance
+          This account is not linked to an employee - HR must link it before attendance
           self-service works.
         </div>
       );

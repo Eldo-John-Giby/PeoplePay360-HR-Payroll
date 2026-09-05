@@ -179,7 +179,7 @@ export interface EmployeeListItem {
 }
 
 // ---------------------------------------------------------------------------
-// Organization — departments / job positions (Ameen's slice)
+// Organization - departments / job positions (Ameen's slice)
 // ---------------------------------------------------------------------------
 
 export interface DepartmentSummary {
@@ -303,7 +303,7 @@ export interface WorkingScheduleCreatePayload {
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — salary rules & structures (Steve's slice)
+// Payroll - salary rules & structures (Steve's slice)
 // ---------------------------------------------------------------------------
 
 export type SalaryRuleCategory =
@@ -388,7 +388,7 @@ export interface SalaryStructureCreatePayload {
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — payruns
+// Payroll - payruns
 // ---------------------------------------------------------------------------
 
 export type PayrunStatus = "draft" | "computed" | "validated" | "paid" | "cancelled";
@@ -486,7 +486,7 @@ export interface SendPayslipsResult {
 }
 
 // ---------------------------------------------------------------------------
-// Payroll — payslips
+// Payroll - payslips
 // ---------------------------------------------------------------------------
 
 export interface PayslipLine {
@@ -579,7 +579,7 @@ export interface TimeOffBalanceItem {
 export interface TimeOffOverview {
   approved_days: string;
   pending_requests: number;
-  balances_by_type: TimeOffBalanceItem[];
+  by_type: TimeOffBalanceItem[];
 }
 
 export interface PayrollAlertItem {
@@ -591,4 +591,14 @@ export interface PayrollAlertItem {
 export interface PayrollAlerts {
   alerts: PayrollAlertItem[];
   total_open_payslips: number;
+  unvalidated_payslips: number;
+}
+
+export interface PayslipStatusOverview {
+  paid: number;
+  validated: number;
+  computed: number;
+  draft: number;
+  with_warnings: number;
+  unvalidated: number;
 }

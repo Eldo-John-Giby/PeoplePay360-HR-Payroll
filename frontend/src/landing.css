@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Landing page — Odoo employees-page inspired (odoo.com/app/employees)
+   Landing page - Odoo employees-page inspired (odoo.com/app/employees)
    Signature purple #714b67 · hover #5a3c52 · dark #111827 · Inter
    =========================================================================== */
 
@@ -48,17 +48,6 @@
   font-size: 19px;
   letter-spacing: -0.2px;
   white-space: nowrap;
-}
-
-.ld-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--o-purple), var(--o-purple-deeper));
-  box-shadow: 0 4px 12px rgb(113 75 103 / 40%);
 }
 
 .ld-links {
@@ -123,15 +112,16 @@
   flex-shrink: 0;
 }
 
-.ld-btn-dark {
-  background: var(--o-purple);
-  color: #fff;
-  box-shadow: 0 8px 20px rgb(113 75 103 / 45%);
+.ld .ld-btn-dark {
+  background: #fff;
+  color: #000;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 8%);
 }
 
-.ld-btn-dark:hover {
-  background: var(--o-purple-dark);
-  box-shadow: 0 10px 24px rgb(113 75 103 / 55%);
+.ld .ld-btn-dark:hover {
+  background: #f3f4f6;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 12%);
 }
 
 .ld-btn-light {

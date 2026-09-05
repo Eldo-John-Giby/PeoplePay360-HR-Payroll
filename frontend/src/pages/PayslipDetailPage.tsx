@@ -77,7 +77,7 @@ export function PayslipDetailPage() {
   return (
     <div className="stack">
       <div className="row spread">
-        <h2>Payslip — {slip.employee_name}</h2>
+        <h2>Payslip - {slip.employee_name}</h2>
         <div className="row">
           <button className="btn btn-ghost" onClick={() => window.print()}>
             🖨 Print payslip

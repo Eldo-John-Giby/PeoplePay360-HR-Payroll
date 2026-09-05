@@ -42,7 +42,7 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <Routes>
-      {/* Public marketing landing page — the entry point of the app. */}
+      {/* Public marketing landing page - the entry point of the app. */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
 

@@ -326,7 +326,7 @@ export function WorkingSchedulesPage() {
                       />
                     </td>
                     <td className="muted">
-                      {l.enabled ? `${dayHours.toFixed(2)} h` : "—"}
+                      {l.enabled ? `${dayHours.toFixed(2)} h` : "-"}
                     </td>
                   </tr>
                 );

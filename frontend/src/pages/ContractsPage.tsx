@@ -41,7 +41,7 @@ const STATUS_CLASS: Record<ContractStatus, string> = {
 };
 
 export function fmtMoney(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   const n = Number(value);
   if (Number.isNaN(n)) return String(value);
   return new Intl.NumberFormat("en-IN", {
@@ -244,7 +244,7 @@ export function ContractsPage() {
           end_date: form.end_date || null,
         });
         setNotice(
-          `Contract ${created.contract_number} created as draft — activate it to make it current.`,
+          `Contract ${created.contract_number} created as draft - activate it to make it current.`,
         );
       }
       resetForm();
@@ -304,11 +304,11 @@ export function ContractsPage() {
               <tr key={c.id}>
                 <td>{c.contract_number}</td>
                 <td>{fmtDate(c.start_date)}</td>
-                <td>{c.end_date ? fmtDate(c.end_date) : "—"}</td>
+                <td>{c.end_date ? fmtDate(c.end_date) : "-"}</td>
                 <td>{fmtMoney(c.wage_monthly)}</td>
-                <td>{c.salary_structure?.name ?? "—"}</td>
-                <td>{c.department?.name ?? "—"}</td>
-                <td>{c.job_position?.title ?? "—"}</td>
+                <td>{c.salary_structure?.name ?? "-"}</td>
+                <td>{c.department?.name ?? "-"}</td>
+                <td>{c.job_position?.title ?? "-"}</td>
                 <td>
                   <span className={`badge ${STATUS_CLASS[c.status]}`}>
                     {STATUS_LABEL[c.status]}
@@ -526,11 +526,11 @@ export function ContractsPage() {
                   <div className="small muted">{c.contract_number}</div>
                 </td>
                 <td>{fmtDate(c.start_date)}</td>
-                <td>{c.end_date ? fmtDate(c.end_date) : "—"}</td>
+                <td>{c.end_date ? fmtDate(c.end_date) : "-"}</td>
                 <td>{fmtMoney(c.wage_monthly)}</td>
-                <td>{c.salary_structure?.name ?? "—"}</td>
-                <td>{c.department?.name ?? "—"}</td>
-                <td>{c.job_position?.title ?? "—"}</td>
+                <td>{c.salary_structure?.name ?? "-"}</td>
+                <td>{c.department?.name ?? "-"}</td>
+                <td>{c.job_position?.title ?? "-"}</td>
                 <td>
                   <span className={`badge ${STATUS_CLASS[c.status]}`}>
                     {STATUS_LABEL[c.status]}
