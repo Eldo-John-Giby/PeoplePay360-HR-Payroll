@@ -1,19 +1,33 @@
 :root {
-  --bg: #f3f5f9;
+  /* Odoo-inspired palette (odoo.com/app/employees): signature purple #714b67 */
+  --bg: #f7f5f7;
   --panel: #ffffff;
-  --ink: #1c2333;
-  --muted: #667085;
-  --line: #e2e6ee;
-  --brand: #2456d6;
-  --brand-dark: #1c44ad;
+  --ink: #111827;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --brand: #714b67;
+  --brand-dark: #5a3c52;
+  --brand-tint: rgb(113 75 103 / 12%);
   --ok: #12805c;
   --ok-bg: #e7f6ef;
   --warn: #b54708;
   --warn-bg: #fef0dc;
   --danger: #b42318;
   --danger-bg: #fee4e2;
-  --radius: 10px;
-  --shadow: 0 1px 3px rgb(16 24 40 / 8%), 0 1px 2px rgb(16 24 40 / 4%);
+  --radius: 12px;
+  --shadow: 0 1px 3px rgb(17 24 39 / 8%), 0 1px 2px rgb(17 24 39 / 4%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
 }
 
 * {
@@ -45,17 +59,33 @@ body {
   align-items: center;
   gap: 24px;
   padding: 0 24px;
-  background: var(--ink);
+  background: #16121b;
   color: #fff;
-  min-height: 56px;
+  min-height: 58px;
   flex-wrap: wrap;
 }
 
 .brand {
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 800;
   font-size: 16px;
-  letter-spacing: 0.2px;
+  letter-spacing: -0.1px;
   white-space: nowrap;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--brand), #4a2f42);
+  flex-shrink: 0;
 }
 
 .nav {
@@ -223,9 +253,9 @@ h3 {
 
 input,
 select {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   color: var(--ink);
   font: inherit;
@@ -233,7 +263,7 @@ select {
 
 input:focus,
 select:focus {
-  outline: 2px solid rgb(36 86 214 / 30%);
+  outline: 2px solid rgb(113 75 103 / 28%);
   border-color: var(--brand);
 }
 
@@ -263,27 +293,18 @@ select:focus {
 
 .btn {
   border: 0;
-  border-radius: 8px;
-  padding: 9px 14px;
+  border-radius: 10px;
+  padding: 10px 16px;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  background: #e8ecf4;
+  background: #f1eef0;
   color: var(--ink);
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.btn-primary {
-  background: var(--brand);
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--brand-dark);
 }
 
 .btn-warn {
@@ -470,29 +491,454 @@ select:focus {
 
 /* Login ------------------------------------------------------------------- */
 
-.login-wrap {
+.login-page {
   min-height: 100vh;
+  display: flex;
+  background:
+    radial-gradient(900px 480px at 85% -10%, rgb(113 75 103 / 14%), transparent 60%),
+    radial-gradient(700px 420px at 5% 110%, rgb(113 75 103 / 8%), transparent 60%),
+    #f7f5f7;
+}
+
+/* Left sidebar ------------------------------------------------------------ */
+
+.login-side {
+  width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 32px 28px;
+  color: #fff;
+  background:
+    radial-gradient(500px 300px at 90% -10%, rgb(163 127 151 / 35%), transparent 60%),
+    linear-gradient(165deg, #16121b 0%, #241b2c 55%, #3a2436 100%);
+}
+
+.login-side .login-brand {
+  color: #fff;
+}
+
+.login-side .login-brand:hover {
+  color: #e6c3d5;
+}
+
+.login-side-body h2 {
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  margin: 0 0 14px;
+}
+
+.login-side-body p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c7cdd8;
+  margin: 0 0 20px;
+}
+
+.login-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #e5e7eb;
+}
+
+.login-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.login-features li::before {
+  content: "✓";
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgb(113 75 103 / 55%);
+  color: #fff;
+}
+
+.login-side-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-side .login-home {
+  color: #e6c3d5;
+}
+
+.login-side .login-home:hover {
+  color: #fff;
+}
+
+.login-side-note {
+  font-size: 12px;
+  color: #8a94a4;
+}
+
+/* Shared brand + right panel --------------------------------------------- */
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.login-brand:hover {
+  color: var(--brand);
+}
+
+.login-home {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.login-home:hover {
+  color: var(--brand);
+}
+
+.login-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 19px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--brand), #4a2f42);
+  box-shadow: 0 6px 16px rgb(113 75 103 / 40%);
+  flex-shrink: 0;
+}
+
+.login-wrap {
+  flex: 1;
   display: grid;
   place-items: center;
   padding: 24px;
 }
 
 .login-card {
-  width: 380px;
+  width: 400px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  padding: 32px 30px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgb(17 24 39 / 12%);
+}
+
+.login-card-head {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.login-card-head .login-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  font-size: 26px;
+  margin: 0 auto 14px;
+}
+
+.login-card-head h1 {
+  font-size: 24px;
+  letter-spacing: -0.4px;
+}
+
+.login-card-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
   gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
 }
 
 .demo-hints {
-  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .demo-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-weight: 400;
   font-size: 12px;
   text-align: left;
+  padding: 9px 14px;
+  border-radius: 10px;
+}
+
+.demo-chip:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+
+.chip-role {
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+
+.chip-email {
+  color: var(--muted);
+}
+
+/* Sub-navigation (payroll) ------------------------------------------------ */
+
+.subnav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 24px;
+  background: #1d1822;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  flex-wrap: wrap;
+}
+
+.subnav .nav-item {
+  color: #b3a9b8;
+  font-size: 12.5px;
+}
+
+.subnav-label {
+  color: #7d7183;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  padding: 0 8px;
+}
+
+.subnav-sep {
+  width: 1px;
+  height: 18px;
+  background: rgb(255 255 255 / 12%);
+  margin: 0 8px;
+}
+
+/* Wizard ------------------------------------------------------------------- */
+
+.wizard {
+  border: 1px solid var(--brand-tint);
+  box-shadow: 0 14px 40px rgb(17 24 39 / 14%);
+}
+
+.wizard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.wizard-list {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.wizard-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+}
+
+.wizard-row:hover {
+  background: #faf7f9;
+}
+
+.wizard-row:last-child {
+  border-bottom: 0;
+}
+
+.wizard-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+
+.wizard-row-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.wizard-row-name b {
+  display: block;
+  font-size: 13px;
+}
+
+/* Warnings panel ----------------------------------------------------------- */
+
+.warn-panel {
+  border-color: var(--warn-bg);
+  background: linear-gradient(120deg, #fffbf2, #fffdf8);
+}
+
+.warn-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.warn-list li::marker {
+  color: var(--warn);
+}
+
+/* Salary category badges --------------------------------------------------- */
+
+.badge-cat-basic {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.badge-cat-allowance {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge-cat-gross {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.badge-cat-deduction {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-cat-contribution {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.badge-cat-net {
+  background: #111827;
+  color: #fff;
+}
+
+/* Payrun status badge tweaks ---------------------------------------------- */
+
+.badge-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.metric b.ok {
+  color: var(--ok);
+}
+
+.metric b.warn {
+  color: var(--warn);
+}
+
+.metric b.danger {
+  color: var(--danger);
+}
+
+/* Payslip print view ------------------------------------------------------ */
+
+.payslip-print .card {
+  max-width: 720px;
+}
+
+@media (max-width: 860px) {
+  .login-page {
+    flex-direction: column;
+  }
+
+  .login-side {
+    width: 100%;
+    gap: 20px;
+    padding: 24px 22px;
+  }
+
+  .login-side-body h2 {
+    font-size: 22px;
+  }
+
+  .login-features {
+    display: none;
+  }
+
+  .login-side-foot {
+    margin-top: 0;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .topbar,
+  .subnav,
+  .btn,
+  .login-side {
+    display: none !important;
+  }
+
+  .content {
+    max-width: none;
+    padding: 0;
+  }
+
+  .payslip-print .card {
+    border: 0;
+    box-shadow: none;
+    max-width: none;
+  }
+
+  .stack > :not(.payslip-print) {
+    display: none !important;
+  }
 }

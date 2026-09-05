@@ -5,18 +5,51 @@
 import type {
   AllocationStatus,
   Attendance,
+  AttendanceOverview,
   AttendanceStatus,
   AttendanceSummary,
+  ComputeResult,
+  Contract,
+  ContractCreatePayload,
+  ContractUpdatePayload,
+  DashboardKpis,
+  DepartmentSummary,
+  DraftScopeResponse,
+  JobPositionSummary,
+  MarkPaidResult,
   Me,
+  MonthlyTrendItem,
   Page,
+  PayrollAlerts,
+  PayrunDetail,
+  PayrunScope,
+  PayrunStatus,
+  PayrunSummary,
+  PayslipDetail,
+  PayslipSummaryItem,
   RequestStatus,
+  SalaryByDepartmentItem,
+  SalaryRule,
+  SalaryRuleCreatePayload,
+  SalaryRuleUpdatePayload,
+  SalaryStructure,
+  SalaryStructureCreatePayload,
+  SalaryStructureSummary,
+  ScheduleType,
+  SendPayslipsResult,
   TimeOffAllocation,
   TimeOffBalance,
+  TimeOffOverview,
   TimeOffRequest,
   TimeOffType,
   TimeOffUnit,
   TokenResponse,
   UserOut,
+  ValidateResult,
+  WorkingScheduleCreatePayload,
+  WorkingScheduleDetail,
+  WorkingScheduleItem,
+  WorkingScheduleLineInput,
 } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api/v1";
@@ -409,4 +442,332 @@ export function refuseRequest(id: number): Promise<TimeOffRequest> {
 
 export function cancelRequest(id: number): Promise<TimeOffRequest> {
   return request<TimeOffRequest>("POST", `/time-off/requests/${id}/cancel`);
+}
+
+// ---------------------------------------------------------------------------
+// Organization — departments / job positions (Ameen's slice)
+// ---------------------------------------------------------------------------
+
+export function listDepartments(): Promise<Page<DepartmentSummary>> {
+  return request<Page<DepartmentSummary>>(
+    "GET",
+    `/departments${queryString({ page_size: 100 })}`,
+  );
+}
+
+export function listJobPositions(): Promise<Page<JobPositionSummary>> {
+  return request<Page<JobPositionSummary>>(
+    "GET",
+    `/job-positions${queryString({ page_size: 100 })}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contracts (Ameen's slice)
+// ---------------------------------------------------------------------------
+
+export interface ContractFilters {
+  employee_id?: number;
+  status?: string;
+  department_id?: number;
+}
+
+export function listContracts(
+  filters: ContractFilters = {},
+  pageSize = 100,
+): Promise<Page<Contract>> {
+  return request<Page<Contract>>(
+    "GET",
+    `/contracts${queryString({ ...filters, page_size: pageSize })}`,
+  );
+}
+
+export function getContract(id: number): Promise<Contract> {
+  return request<Contract>("GET", `/contracts/${id}`);
+}
+
+/** EMPLOYEE self-service — the logged-in user's own contract history. */
+export function listMyContracts(): Promise<Contract[]> {
+  return request<Contract[]>("GET", "/employees/me/contracts");
+}
+
+export function createContract(
+  payload: ContractCreatePayload,
+): Promise<Contract> {
+  return request<Contract>("POST", "/contracts", payload);
+}
+
+export function updateContract(
+  id: number,
+  payload: ContractUpdatePayload,
+): Promise<Contract> {
+  return request<Contract>("PATCH", `/contracts/${id}`, payload);
+}
+
+export function activateContract(
+  id: number,
+  version_id: number,
+): Promise<Contract> {
+  return request<Contract>("POST", `/contracts/${id}/activate`, { version_id });
+}
+
+export function expireContract(
+  id: number,
+  version_id: number,
+): Promise<Contract> {
+  return request<Contract>("POST", `/contracts/${id}/expire`, { version_id });
+}
+
+export function cancelContract(
+  id: number,
+  version_id: number,
+): Promise<Contract> {
+  return request<Contract>("POST", `/contracts/${id}/cancel`, { version_id });
+}
+
+// ---------------------------------------------------------------------------
+// Working schedules (Ameen's slice)
+// ---------------------------------------------------------------------------
+
+export function listWorkingSchedules(): Promise<Page<WorkingScheduleItem>> {
+  return request<Page<WorkingScheduleItem>>(
+    "GET",
+    `/working-schedules${queryString({ page_size: 100 })}`,
+  );
+}
+
+export function getWorkingSchedule(id: number): Promise<WorkingScheduleDetail> {
+  return request<WorkingScheduleDetail>("GET", `/working-schedules/${id}`);
+}
+
+export function createWorkingSchedule(
+  payload: WorkingScheduleCreatePayload,
+): Promise<WorkingScheduleDetail> {
+  return request<WorkingScheduleDetail>("POST", "/working-schedules", payload);
+}
+
+export function updateWorkingSchedule(
+  id: number,
+  payload: { name?: string; schedule_type?: ScheduleType; is_active?: boolean },
+): Promise<WorkingScheduleDetail> {
+  return request<WorkingScheduleDetail>("PATCH", `/working-schedules/${id}`, payload);
+}
+
+export function replaceWorkingScheduleLines(
+  id: number,
+  lines: WorkingScheduleLineInput[],
+): Promise<WorkingScheduleDetail> {
+  return request<WorkingScheduleDetail>(
+    "PUT",
+    `/working-schedules/${id}/lines`,
+    lines,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — salary rules & structures (Steve's slice)
+// ---------------------------------------------------------------------------
+
+export function listSalaryRules(): Promise<Page<SalaryRule>> {
+  return request<Page<SalaryRule>>(
+    "GET",
+    `/payroll/salary-rules${queryString({ page_size: 100 })}`,
+  );
+}
+
+export function createSalaryRule(
+  payload: SalaryRuleCreatePayload,
+): Promise<SalaryRule> {
+  return request<SalaryRule>("POST", "/payroll/salary-rules", payload);
+}
+
+export function updateSalaryRule(
+  id: number,
+  payload: SalaryRuleUpdatePayload,
+): Promise<SalaryRule> {
+  return request<SalaryRule>("PATCH", `/payroll/salary-rules/${id}`, payload);
+}
+
+export function listSalaryStructures(): Promise<Page<SalaryStructureSummary>> {
+  return request<Page<SalaryStructureSummary>>(
+    "GET",
+    `/payroll/salary-structures${queryString({ page_size: 100 })}`,
+  );
+}
+
+export function getSalaryStructure(id: number): Promise<SalaryStructure> {
+  return request<SalaryStructure>("GET", `/payroll/salary-structures/${id}`);
+}
+
+export function createSalaryStructure(
+  payload: SalaryStructureCreatePayload,
+): Promise<SalaryStructure> {
+  return request<SalaryStructure>("POST", "/payroll/salary-structures", payload);
+}
+
+export function updateSalaryStructure(
+  id: number,
+  payload: { name?: string; code?: string; is_active?: boolean },
+): Promise<SalaryStructure> {
+  return request<SalaryStructure>("PATCH", `/payroll/salary-structures/${id}`, payload);
+}
+
+export function replaceSalaryStructureRules(
+  id: number,
+  rules: { salary_rule_id: number; sequence: number }[],
+): Promise<SalaryStructure> {
+  return request<SalaryStructure>(
+    "PUT",
+    `/payroll/salary-structures/${id}/rules`,
+    { rules },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — payruns (wizard + lifecycle)
+// ---------------------------------------------------------------------------
+
+export function draftPayrunScope(scope: PayrunScope): Promise<DraftScopeResponse> {
+  return request<DraftScopeResponse>("POST", "/payroll/payruns/draft-scope", scope);
+}
+
+export function createPayrun(payload: {
+  scope: PayrunScope;
+  employee_ids: number[];
+}): Promise<PayrunDetail> {
+  return request<PayrunDetail>("POST", "/payroll/payruns", payload);
+}
+
+export function listPayruns(
+  filters: { status?: PayrunStatus; period_start?: string; period_end?: string } = {},
+): Promise<Page<PayrunSummary>> {
+  return request<Page<PayrunSummary>>(
+    "GET",
+    `/payroll/payruns${queryString({ ...filters, page_size: 100 })}`,
+  );
+}
+
+export function getPayrun(id: number): Promise<PayrunDetail> {
+  return request<PayrunDetail>("GET", `/payroll/payruns/${id}`);
+}
+
+export function computePayrun(id: number): Promise<ComputeResult> {
+  return request<ComputeResult>("POST", `/payroll/payruns/${id}/compute`);
+}
+
+export function validatePayrun(id: number): Promise<ValidateResult> {
+  return request<ValidateResult>("POST", `/payroll/payruns/${id}/validate`);
+}
+
+export function markPayrunPaid(id: number): Promise<MarkPaidResult> {
+  return request<MarkPaidResult>("POST", `/payroll/payruns/${id}/mark-paid`);
+}
+
+export function cancelPayrun(id: number): Promise<{ payrun_id: number; status: PayrunStatus; cancelled_payslips: number }> {
+  return request("POST", `/payroll/payruns/${id}/cancel`);
+}
+
+export function sendPayslips(id: number): Promise<SendPayslipsResult> {
+  return request<SendPayslipsResult>("POST", `/payroll/payruns/${id}/send-payslips`);
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — payslips
+// ---------------------------------------------------------------------------
+
+export function listPayslips(
+  filters: { payrun_id?: number; employee_id?: number; status?: PayrunStatus } = {},
+): Promise<Page<PayslipSummaryItem>> {
+  return request<Page<PayslipSummaryItem>>(
+    "GET",
+    `/payroll/payslips${queryString({ ...filters, page_size: 100 })}`,
+  );
+}
+
+export function listMyPayslips(): Promise<Page<PayslipSummaryItem>> {
+  return request<Page<PayslipSummaryItem>>(
+    "GET",
+    `/payroll/payslips/me${queryString({ page_size: 100 })}`,
+  );
+}
+
+export function getPayslip(id: number): Promise<PayslipDetail> {
+  return request<PayslipDetail>("GET", `/payroll/payslips/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard (Steve's slice)
+// ---------------------------------------------------------------------------
+
+export interface DashboardFilters {
+  period_start?: string;
+  period_end?: string;
+  department_id?: number;
+  employee_type?: string;
+}
+
+export function getDashboardKpis(
+  filters: DashboardFilters = {},
+): Promise<DashboardKpis> {
+  return request<DashboardKpis>(
+    "GET",
+    `/dashboard/kpis${queryString({ ...filters })}`,
+  );
+}
+
+export function getSalaryByDepartment(
+  filters: DashboardFilters = {},
+): Promise<SalaryByDepartmentItem[]> {
+  return request<SalaryByDepartmentItem[]>(
+    "GET",
+    `/dashboard/salary-by-department${queryString({ ...filters })}`,
+  );
+}
+
+export function getMonthlyTrend(
+  months = 6,
+  filters: DashboardFilters = {},
+): Promise<MonthlyTrendItem[]> {
+  return request<MonthlyTrendItem[]>(
+    "GET",
+    `/dashboard/monthly-net-salary-trend${queryString({ ...filters, months })}`,
+  );
+}
+
+export function getAttendanceOverview(
+  filters: DashboardFilters = {},
+): Promise<AttendanceOverview> {
+  return request<AttendanceOverview>(
+    "GET",
+    `/dashboard/attendance-overview${queryString({ ...filters })}`,
+  );
+}
+
+export function getTimeOffOverview(
+  filters: DashboardFilters = {},
+): Promise<TimeOffOverview> {
+  return request<TimeOffOverview>(
+    "GET",
+    `/dashboard/time-off-overview${queryString({ ...filters })}`,
+  );
+}
+
+export function getPayrollAlerts(
+  filters: DashboardFilters = {},
+): Promise<PayrollAlerts> {
+  return request<PayrollAlerts>(
+    "GET",
+    `/dashboard/payroll-alerts${queryString({ ...filters })}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Auth — role assignment (ADMIN)
+// ---------------------------------------------------------------------------
+
+export function updateUserRoles(
+  userId: number,
+  role_names: string[],
+): Promise<UserOut> {
+  return request<UserOut>("PATCH", `/auth/users/${userId}/roles`, { role_names });
 }
