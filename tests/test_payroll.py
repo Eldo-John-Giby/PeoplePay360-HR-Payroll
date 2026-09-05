@@ -37,6 +37,8 @@ from app.models.enums import (
     PayrunStatus,
     SalaryRuleCategory,
     ScheduleType,
+    TimeOffRequestStatus,
+    TimeOffUnit,
 )
 from app.models.organization import Company, Department, JobPosition, WorkingSchedule, WorkingScheduleLine
 from app.models.payroll import (
@@ -48,7 +50,7 @@ from app.models.payroll import (
     SalaryStructure,
     SalaryStructureRule,
 )
-from app.models.timeoff import TimeOffType
+from app.models.timeoff import TimeOffRequest, TimeOffType
 from app.modules.payroll import engine, service
 from app.modules.payroll.engine import (
     PayrollEngineError,
@@ -335,6 +337,18 @@ _CONTRACT_DERIVED_RULES = [
      None, None, None, "BASIC + HRA", 30),
 ]
 
+# Fix 2: a structure whose formula lines reference the leave context keys
+# (PAID_LEAVE_DAYS / UNPAID_LEAVE_DAYS pass through _make_structure's code
+# rewrite untouched — they are virtual keys, not rule codes).
+_LEAVE_DERIVED_RULES = [
+    ("BASIC", SalaryRuleCategory.basic, ComputationMethod.fixed,
+     Decimal("1000.00"), None, None, None, 10),
+    ("PAID_BONUS", SalaryRuleCategory.allowance, ComputationMethod.formula,
+     None, None, None, "PAID_LEAVE_DAYS * 100", 20),
+    ("UNPAID_DED", SalaryRuleCategory.deduction, ComputationMethod.formula,
+     None, None, None, "UNPAID_LEAVE_DAYS * 50", 30),
+]
+
 
 def _make_structure(db: Session, rules_spec=None):
     """Create a salary structure + rules with UNIQUE rule codes per test
@@ -592,6 +606,87 @@ def test_compute_worked_days_from_attendance(db):
     service.compute_payrun(db, payrun.id)
     slip = service.get_payslip(db, service.list_payslips(db, employee_id=emp.id).items[0].id)
     assert slip.worked_days == 3
+
+
+def test_approved_leave_days_enter_engine_context(db):
+    """Fix 2: approved day-unit leave overlapping the payrun period is split
+    by affects_payroll into PAID_LEAVE_DAYS / UNPAID_LEAVE_DAYS, and structure
+    formulas can reference them. Requests that are unapproved, outside the
+    period, or hours-unit are ignored."""
+    structure, rules = _make_structure(db, _LEAVE_DERIVED_RULES)
+    emp, _ = _make_employee(db, structure, wage=Decimal("1000.00"))
+    payrun = _make_payrun(db, structure, date(2026, 9, 1), date(2026, 9, 30), [emp])
+
+    def _type(name: str, unit: TimeOffUnit, affects_payroll: bool) -> TimeOffType:
+        t = TimeOffType(
+            name=f"{name} {uuid.uuid4().hex[:6]}", unit=unit,
+            requires_allocation=False, requires_approval=True,
+            affects_payroll=affects_payroll, is_active=True,
+        )
+        db.add(t)
+        return t
+
+    paid = _type("Paid", TimeOffUnit.days, True)
+    unpaid = _type("Unpaid", TimeOffUnit.days, False)
+    wfh = _type("WFH", TimeOffUnit.hours, True)
+    db.flush()
+
+    def _request(t: TimeOffType, d_from: date, d_to: date,
+                 status: TimeOffRequestStatus) -> None:
+        duration = (
+            Decimal("8.00") if t.unit == TimeOffUnit.hours
+            else Decimal(str((d_to - d_from).days + 1))
+        )
+        db.add(TimeOffRequest(
+            employee_id=emp.id, time_off_type_id=t.id,
+            date_from=d_from, date_to=d_to, duration=duration, status=status,
+        ))
+
+    # 3 paid days fully inside the period (Sep 10-12).
+    _request(paid, date(2026, 9, 10), date(2026, 9, 12), TimeOffRequestStatus.approved)
+    # Straddles the period end -> only Sep 28-30 (3 days) count, not Oct 1-2.
+    _request(paid, date(2026, 9, 28), date(2026, 10, 2), TimeOffRequestStatus.approved)
+    # 2 unpaid days inside the period.
+    _request(unpaid, date(2026, 9, 20), date(2026, 9, 21), TimeOffRequestStatus.approved)
+    # Ignored: not approved.
+    _request(paid, date(2026, 9, 5), date(2026, 9, 5), TimeOffRequestStatus.to_approve)
+    # Ignored: outside the period.
+    _request(paid, date(2026, 10, 5), date(2026, 10, 6), TimeOffRequestStatus.approved)
+    # Ignored: hours-unit types have no day granularity.
+    _request(wfh, date(2026, 9, 15), date(2026, 9, 15), TimeOffRequestStatus.approved)
+    db.flush()
+
+    result = compute_payslip_for_employee(db, payrun, emp)
+    lines = {l.code: l.amount for l in result.lines}
+    assert lines[rules["PAID_BONUS"].code] == Decimal("600.00")  # (3 + 3) * 100
+    assert lines[rules["UNPAID_DED"].code] == Decimal("100.00")  # 2 * 50
+    assert result.gross_salary == Decimal("1600.00")
+    assert result.net_salary == Decimal("1500.00")
+    # The only warning is the documented "no explicit NET rule" fallback.
+    assert not any(
+        "PAID_LEAVE_DAYS" in w[1] or "UNPAID_LEAVE_DAYS" in w[1]
+        for w in result.warnings
+    )
+
+
+def test_engine_leave_days_default_to_zero_without_requests(db):
+    """Fix 2: with no approved leave overlapping the period, the leave
+    context keys are 0 and a structure that references them computes exactly
+    as before (no unknown-name warning, zero leave lines)."""
+    structure, rules = _make_structure(db, _LEAVE_DERIVED_RULES)
+    emp, _ = _make_employee(db, structure, wage=Decimal("1000.00"))
+    payrun = _make_payrun(db, structure, date(2026, 9, 1), date(2026, 9, 30), [emp])
+
+    result = compute_payslip_for_employee(db, payrun, emp)
+    lines = {l.code: l.amount for l in result.lines}
+    assert lines[rules["PAID_BONUS"].code] == Decimal("0.00")
+    assert lines[rules["UNPAID_DED"].code] == Decimal("0.00")
+    assert result.gross_salary == Decimal("1000.00")
+    assert result.net_salary == Decimal("1000.00")
+    assert not any(
+        "PAID_LEAVE_DAYS" in w[1] or "UNPAID_LEAVE_DAYS" in w[1]
+        for w in result.warnings
+    )
 
 
 def test_cancel_only_from_draft_or_computed(db):

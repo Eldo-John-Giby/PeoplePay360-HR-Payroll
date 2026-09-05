@@ -15,6 +15,9 @@ Context keys injected before the loop (prompt §2.1 / §2.4):
 - WORKED_DAYS         = attendance-derived worked days in the period
 - TOTAL_WORKING_DAYS  = expected working days from the working schedule
                         (0 when the schedule has no lines -> guarded, warn)
+- PAID_LEAVE_DAYS     = approved day-unit leave days inside the period whose
+                        type has affects_payroll = true (0 when none)
+- UNPAID_LEAVE_DAYS   = the same for affects_payroll = false
 
 Rounding: every stored amount is quantized to 2 decimal places with
 ROUND_HALF_UP (payroll convention; NUMERIC(12,2) columns).
@@ -36,9 +39,12 @@ from app.models.enums import (
     ContractStatus,
     PayslipWarningType,
     SalaryRuleCategory,
+    TimeOffRequestStatus,
+    TimeOffUnit,
 )
 from app.models.organization import WorkingSchedule
 from app.models.payroll import SalaryRule, SalaryStructure, SalaryStructureRule
+from app.models.timeoff import TimeOffRequest, TimeOffType
 
 MONEY_QUANTUM = Decimal("0.01")
 
@@ -404,6 +410,47 @@ def expected_working_days(
     )
 
 
+def split_approved_leave_days(
+    db: Session, employee_id: int, period_start: date, period_end: date
+) -> tuple[Decimal, Decimal]:
+    """Approved leave days inside the period, split into (paid, unpaid) by
+    the leave type's `affects_payroll` flag.
+
+    Leave must factor into salary (product contract): approved day-unit
+    requests whose [date_from, date_to] overlaps the payroll period count
+    here. A day-unit request's stored duration equals its calendar span, so a
+    request straddling a period boundary is prorated to the overlapping
+    calendar days. Hours-unit types (e.g. Work From Home) have no day
+    granularity and are skipped — days are the supported unit first.
+    """
+    rows = db.execute(
+        select(
+            TimeOffRequest.date_from,
+            TimeOffRequest.date_to,
+            TimeOffType.affects_payroll,
+        )
+        .join(TimeOffType, TimeOffType.id == TimeOffRequest.time_off_type_id)
+        .where(
+            TimeOffRequest.employee_id == employee_id,
+            TimeOffRequest.status == TimeOffRequestStatus.approved,
+            TimeOffType.unit == TimeOffUnit.days,
+            TimeOffRequest.date_from <= period_end,
+            TimeOffRequest.date_to >= period_start,
+        )
+    ).all()
+    paid = Decimal("0")
+    unpaid = Decimal("0")
+    for date_from, date_to, affects_payroll in rows:
+        start = max(date_from, period_start)
+        end = min(date_to, period_end)
+        days = Decimal((end - start).days + 1)
+        if affects_payroll:
+            paid += days
+        else:
+            unpaid += days
+    return paid, unpaid
+
+
 def _overlap_days(
     contract_start: date, contract_end: date | None, period_start: date, period_end: date
 ) -> int:
@@ -548,11 +595,16 @@ def compute_payslip_for_employee(
 
     worked_days = count_worked_days(db, employee.id, payrun.period_start, payrun.period_end)
     total_working_days = expected_working_days(db, employee, payrun.period_start, payrun.period_end)
+    paid_leave_days, unpaid_leave_days = split_approved_leave_days(
+        db, employee.id, payrun.period_start, payrun.period_end
+    )
 
     base_context = {
         "CONTRACT_WAGE": contract.wage_monthly if contract else Decimal("0"),
         "WORKED_DAYS": worked_days,
         "TOTAL_WORKING_DAYS": Decimal(total_working_days),
+        "PAID_LEAVE_DAYS": paid_leave_days,
+        "UNPAID_LEAVE_DAYS": unpaid_leave_days,
     }
 
     result = run_engine(rules, base_context)

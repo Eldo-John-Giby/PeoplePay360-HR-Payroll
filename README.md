@@ -30,6 +30,12 @@ python -m app.seed.seed_data
 uvicorn app.main:app --reload
 ```
 
+> **No-Docker launcher removed**: the former `dev.py` (embedded-Postgres
+> bootstrap via `pgserver`) was deleted because its embedded build ships no
+> contrib modules — the initial migration enables `pg_trgm`, so the launcher's
+> schema diverged from the real one. Docker (or a system Postgres) is the
+> supported path above.
+
 ### Demo logins (password for all: `Password@123`)
 
 | Email | Role |

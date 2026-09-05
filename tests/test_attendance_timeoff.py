@@ -380,16 +380,21 @@ _ROLE_CACHE_ATTR = "_pp360_roles"
 
 
 def _role(db: Session, name: str) -> Role:
-    """Session-local Role cache — role names are unique at the DB level, so
-    each transaction creates each role once (rolled back with the test)."""
+    """Session-local Role cache — look the role up in the DB before creating
+    it, so the helper is idempotent against a seeded DB (the seed already
+    created EMPLOYEE / HR_MANAGER / ... rows, so a blind insert would violate
+    uq_roles_name). New roles are created once per transaction and rolled
+    back with the test."""
     cache = getattr(db, _ROLE_CACHE_ATTR, None)
     if cache is None:
         cache = {}
         setattr(db, _ROLE_CACHE_ATTR, cache)
     if name not in cache:
-        role = Role(name=name, description=f"test role {name}")
-        db.add(role)
-        db.flush()
+        role = db.scalar(select(Role).where(Role.name == name))
+        if role is None:
+            role = Role(name=name, description=f"test role {name}")
+            db.add(role)
+            db.flush()
         cache[name] = role
     return cache[name]
 
@@ -907,9 +912,14 @@ def test_employee_never_sees_another_employees_records(db):
     assert service.list_attendance(db, user_a).total == 0
     assert service.list_time_off_requests(db, user_a).total == 0
 
-    # HR sees across employees without an employee_id filter.
-    assert service.list_attendance(db, hr).total == 1
-    assert service.list_time_off_requests(db, hr).total == 1
+    # HR sees across employees without an employee_id filter. On a seeded DB
+    # the unfiltered listing also carries demo rows, so assert the rows this
+    # test created are present (page_size covers the seeded rows too) rather
+    # than an absolute whole-DB count.
+    hr_att = service.list_attendance(db, hr, page_size=1000)
+    assert b_att.id in {r.id for r in hr_att.items}
+    hr_reqs = service.list_time_off_requests(db, hr, page_size=1000)
+    assert b_req.id in {r.id for r in hr_reqs.items}
 
     # Balances self-service only shows A's own types.
     service.create_time_off_allocation(
