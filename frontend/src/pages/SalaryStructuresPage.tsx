@@ -10,11 +10,12 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import {
   ApiError,
   createSalaryStructure,
+  deleteSalaryStructure,
   getSalaryStructure,
   listSalaryRules,
   listSalaryStructures,
-  replaceStructureRules,
-  setStructureActive,
+  replaceSalaryStructureRules,
+  updateSalaryStructure,
 } from "../api/client";
 import type {
   SalaryRule,
@@ -40,7 +41,7 @@ export function SalaryStructuresPage() {
 
   const loadStructures = useCallback(async () => {
     try {
-      const page = await listSalaryStructures(100);
+      const page = await listSalaryStructures();
       setStructures(page.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -50,7 +51,7 @@ export function SalaryStructuresPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [, rules] = await Promise.all([loadStructures(), listSalaryRules({}, 200)]);
+      const [, rules] = await Promise.all([loadStructures(), listSalaryRules()]);
       setLibrary(rules.items.filter((r) => r.is_active));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -103,13 +104,30 @@ export function SalaryStructuresPage() {
     setBusyId(s.id);
     setError("");
     try {
-      await setStructureActive(s.id, !s.is_active);
+      await updateSalaryStructure(s.id, { is_active: !s.is_active });
       if (selectedId === s.id) setDetail(null);
       await loadStructures();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusyId(null);
+    }
+  }
+
+  const [deletingStructureId, setDeletingStructureId] = useState<number | null>(null);
+
+  async function onDeleteStructure(s: SalaryStructureSummary) {
+    setDeletingStructureId(s.id);
+    setError("");
+    try {
+      await deleteSalaryStructure(s.id);
+      if (selectedId === s.id) setDetail(null);
+      await loadStructures();
+      setNotice(`Structure ${s.code} deactivated.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDeletingStructureId(null);
     }
   }
 
@@ -162,7 +180,7 @@ export function SalaryStructuresPage() {
     setNotice("");
     try {
       // Renumber by position so ascending order == visual order.
-      const updated = await replaceStructureRules(
+      const updated = await replaceSalaryStructureRules(
         detail.id,
         chain.map((r, i) => ({ salary_rule_id: r.rule.id, sequence: (i + 1) * 10 })),
       );
@@ -261,6 +279,15 @@ export function SalaryStructuresPage() {
                     onClick={() => void onToggleActive(s)}
                   >
                     {s.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                )}
+                {canWrite && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    disabled={busyId === s.id || deletingStructureId === s.id || !s.is_active}
+                    onClick={() => void onDeleteStructure(s)}
+                  >
+                    {deletingStructureId === s.id ? "Deleting…" : "Delete"}
                   </button>
                 )}
               </td>

@@ -5,6 +5,7 @@ import {
   ApiError,
   cancelPayrun,
   computePayrun,
+  getPayslip,
   getPayrun,
   listPayslips,
   listSalaryStructures,
@@ -16,7 +17,6 @@ import type {
   PayrunDetail,
   PayrunStatus,
   PayslipSummaryItem,
-  PayslipWarning,
   SalaryStructureSummary,
 } from "../api/types";
 import { fmtDate, useAuth } from "../auth";
@@ -83,18 +83,13 @@ export function PayrunProcessingPage() {
       }[] = [];
       for (const s of flagged) {
         try {
-          const res = await fetch(`/api/v1/payroll/payslips/${s.id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("pp360.access_token")}` },
-          });
-          if (res.ok) {
-            const detail = (await res.json()) as { warnings?: PayslipWarning[] };
-            for (const w of detail.warnings ?? []) {
-              warns.push({
-                employee_name: s.employee_name,
-                message: `${WARNING_LABEL[w.warning_type] ?? w.warning_type}: ${w.message}`,
-                warning_type: w.warning_type,
-              });
-            }
+          const detail = await getPayslip(s.id);
+          for (const w of detail.warnings ?? []) {
+            warns.push({
+              employee_name: s.employee_name,
+              message: `${WARNING_LABEL[w.warning_type] ?? w.warning_type}: ${w.message}`,
+              warning_type: w.warning_type,
+            });
           }
         } catch {
           /* ignore per-payslip warning fetch errors */

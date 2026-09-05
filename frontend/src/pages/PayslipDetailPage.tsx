@@ -10,7 +10,8 @@ import {
   downloadPayslipPdf,
   getPayslip,
 } from "../api/client";
-import type { Payslip } from "../api/types";
+// PayslipDetail is the committed API name for the full payslip breakdown.
+import type { PayslipDetail as Payslip } from "../api/types";
 import { fmtDate, fmtMoney, useAuth } from "../auth";
 import { PayrunStatusBadge } from "./PayrunsPage";
 
@@ -24,8 +25,8 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export function PayslipDetailPage() {
-  const { payslipId } = useParams();
-  const id = Number(payslipId);
+  const { id: paramId, payslipId } = useParams();
+  const id = Number(paramId ?? payslipId);
   const { hasRole } = useAuth();
   const isPayroll = hasRole("HR_PAYROLL_USER", "HR_PAYROLL_MANAGER", "ADMIN");
 

@@ -9,12 +9,12 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ApiError,
   createPayrun,
-  draftScope,
+  draftPayrunScope,
   listPayruns,
   listSalaryStructures,
 } from "../api/client";
 import type {
-  DraftScopeResult,
+  DraftScopeResponse,
   PayrunScope,
   PayrunStatus,
   PayrunSummary,
@@ -65,7 +65,7 @@ export function PayrunsPage() {
       name: "",
     };
   });
-  const [preview, setPreview] = useState<DraftScopeResult | null>(null);
+  const [preview, setPreview] = useState<DraftScopeResponse | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [wizardMsg, setWizardMsg] = useState("");
@@ -74,7 +74,9 @@ export function PayrunsPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const page = await listPayruns(statusFilter ? { status: statusFilter } : {});
+      const page = await listPayruns(
+        statusFilter ? { status: statusFilter as PayrunStatus } : {},
+      );
       setPayruns(page.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -102,7 +104,7 @@ export function PayrunsPage() {
     setWizardErr("");
     setWizardMsg("");
     try {
-      const res = await draftScope(scope);
+      const res = await draftPayrunScope(scope);
       setPreview(res);
       setSelected(new Set());
     } catch (err) {
@@ -128,7 +130,10 @@ export function PayrunsPage() {
     setWizardErr("");
     setWizardMsg("");
     try {
-      const run = await createPayrun(preview.scope, [...selected]);
+      const run = await createPayrun({
+        scope: preview.scope,
+        employee_ids: [...selected],
+      });
       resetWizard();
       nav(`/payroll/payruns/${run.id}`);
     } catch (err) {

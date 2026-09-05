@@ -33,7 +33,7 @@ export function PayslipsPage() {
     try {
       const page = isPayroll
         ? await listPayslips({
-            status: statusFilter || undefined,
+            status: (statusFilter as PayrunStatus) || undefined,
             payrun_id: payrunFilter ? Number(payrunFilter) : undefined,
             employee_id: employeeFilter ? Number(employeeFilter) : undefined,
           })

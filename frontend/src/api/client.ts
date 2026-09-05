@@ -12,6 +12,7 @@ import type {
   Contract,
   ContractCreatePayload,
   ContractUpdatePayload,
+  DashboardFilterOptions,
   DashboardKpis,
   DepartmentSummary,
   DraftScopeResponse,
@@ -21,6 +22,7 @@ import type {
   MonthlyTrendItem,
   Page,
   PayrollAlerts,
+  PayslipStatusOverview,
   PayrunDetail,
   PayrunScope,
   PayrunStatus,
@@ -588,6 +590,14 @@ export function updateSalaryRule(
   return request<SalaryRule>("PATCH", `/payroll/salary-rules/${id}`, payload);
 }
 
+export function getSalaryRule(id: number): Promise<SalaryRule> {
+  return request<SalaryRule>("GET", `/payroll/salary-rules/${id}`);
+}
+
+export function deleteSalaryRule(id: number): Promise<void> {
+  return request<void>("DELETE", `/payroll/salary-rules/${id}`);
+}
+
 export function listSalaryStructures(): Promise<Page<SalaryStructureSummary>> {
   return request<Page<SalaryStructureSummary>>(
     "GET",
@@ -621,6 +631,10 @@ export function replaceSalaryStructureRules(
     `/payroll/salary-structures/${id}/rules`,
     { rules },
   );
+}
+
+export function deleteSalaryStructure(id: number): Promise<void> {
+  return request<void>("DELETE", `/payroll/salary-structures/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +709,34 @@ export function getPayslip(id: number): Promise<PayslipDetail> {
   return request<PayslipDetail>("GET", `/payroll/payslips/${id}`);
 }
 
+/** Download a payslip PDF (needs the bearer token; a plain <a href> won't
+ * carry it, so we fetch the bytes and click a blob link). */
+export async function downloadPayslipPdf(id: number): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/payroll/payslips/${id}/pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let detail = `PDF download failed (${res.status})`;
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (data.detail) detail = data.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payslip-${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard (Steve's slice)
 // ---------------------------------------------------------------------------
@@ -704,6 +746,7 @@ export interface DashboardFilters {
   period_end?: string;
   department_id?: number;
   employee_type?: string;
+  company_id?: number;
 }
 
 export function getDashboardKpis(
@@ -759,6 +802,19 @@ export function getPayrollAlerts(
     "GET",
     `/dashboard/payroll-alerts${queryString({ ...filters })}`,
   );
+}
+
+export function getPayslipStatus(
+  filters: DashboardFilters = {},
+): Promise<PayslipStatusOverview> {
+  return request<PayslipStatusOverview>(
+    "GET",
+    `/dashboard/payslip-status${queryString({ ...filters })}`,
+  );
+}
+
+export function getDashboardFilterOptions(): Promise<DashboardFilterOptions> {
+  return request<DashboardFilterOptions>("GET", "/dashboard/filter-options");
 }
 
 // ---------------------------------------------------------------------------

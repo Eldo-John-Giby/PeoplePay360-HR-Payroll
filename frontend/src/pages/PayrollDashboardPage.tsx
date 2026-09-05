@@ -2,13 +2,14 @@
 // composable filter bar (period + department + employee type + company,
 // AND-composed server-side). Every number shown comes from a real DB
 // aggregation endpoint — nothing is hardcoded:
-//   5 KPI cards   -> /kpis            (paid-only net salary etc.)
-//   Charts        -> /salary-by-department, /monthly-net-salary-trend
-//   Status+Alerts -> /payslip-status, /payroll-alerts
-//   Attendance    -> /attendance-overview
-//   Time off      -> /time-off-overview (per-type rows)
-//   Departments   -> /salary-by-department (dept / headcount / cost)
-// All of them re-fetch on every filter change.
+//   5 KPI cards         -> /dashboard/kpis (paid-only net salary etc.)
+//   Charts              -> /dashboard/salary-by-department, monthly trend
+//   Payslip status      -> /dashboard/payslip-status
+//   Payroll alerts      -> /dashboard/payroll-alerts
+//   Attendance overview -> /dashboard/attendance-overview
+//   Time off overview   -> /dashboard/time-off-overview (per-type rows)
+//   Department overview -> /dashboard/salary-by-department (cost/headcount)
+// All re-fetch together whenever the applied filters change.
 
 import {
   useCallback,
@@ -21,21 +22,21 @@ import { Link } from "react-router-dom";
 
 import {
   ApiError,
-  fetchAttendanceOverview,
-  fetchDashboardFilterOptions,
-  fetchKpis,
-  fetchMonthlyTrend,
-  fetchPayrollAlerts,
-  fetchPayslipStatus,
-  fetchSalaryByDepartment,
-  fetchTimeOffOverview,
+  getAttendanceOverview,
+  getDashboardFilterOptions,
+  getDashboardKpis,
+  getMonthlyTrend,
+  getPayrollAlerts,
+  getPayslipStatus,
+  getSalaryByDepartment,
+  getTimeOffOverview,
+  type DashboardFilters,
 } from "../api/client";
 import type {
   AttendanceOverview,
   DashboardFilterOptions,
-  DashboardFilters,
+  DashboardKpis,
   FilterOption,
-  Kpis,
   MonthlyTrendItem,
   PayrollAlertItem,
   PayslipStatusOverview,
@@ -203,7 +204,7 @@ export function PayrollDashboardPage() {
   const [draft, setDraft] = useState<DashboardFilters>({ ...EMPTY_FILTERS });
   const [filters, setFilters] = useState<DashboardFilters>({ ...EMPTY_FILTERS });
 
-  const [kpis, setKpis] = useState<Kpis | null>(null);
+  const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [dept, setDept] = useState<SalaryByDepartmentItem[]>([]);
   const [trend, setTrend] = useState<MonthlyTrendItem[]>([]);
   const [alerts, setAlerts] = useState<PayrollAlertItem[]>([]);
@@ -216,13 +217,12 @@ export function PayrollDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Option lists for the filter bar (companies/departments/employee types)
-  // are fetched once — from the API, never hardcoded.
+  // Option lists (companies/departments/employee types) come from the API.
   const loadOptions = useCallback(async () => {
     try {
-      setOptions(await fetchDashboardFilterOptions());
+      setOptions(await getDashboardFilterOptions());
     } catch {
-      /* non-fatal: selects simply stay empty */
+      /* non-fatal: the selects stay empty */
     }
   }, []);
   useEffect(() => {
@@ -241,13 +241,13 @@ export function PayrollDashboardPage() {
     setError("");
     try {
       const [k, d, t, a, s, at, to] = await Promise.all([
-        fetchKpis(filters),
-        fetchSalaryByDepartment(filters),
-        fetchMonthlyTrend(months, filters),
-        fetchPayrollAlerts(filters),
-        fetchPayslipStatus(filters),
-        fetchAttendanceOverview(filters),
-        fetchTimeOffOverview(filters),
+        getDashboardKpis(filters),
+        getSalaryByDepartment(filters),
+        getMonthlyTrend(months, filters),
+        getPayrollAlerts(filters),
+        getPayslipStatus(filters),
+        getAttendanceOverview(filters),
+        getTimeOffOverview(filters),
       ]);
       setKpis(k);
       setDept(d);
@@ -300,7 +300,7 @@ export function PayrollDashboardPage() {
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     };
     let from: Date;
-    let to = new Date(now.getFullYear(), now.getMonth() + 1, 0); // end of current month
+    let to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     if (preset === "this-month") {
       from = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (preset === "last-month") {
@@ -333,7 +333,7 @@ export function PayrollDashboardPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Filter bar — every panel below is re-queried with these filters */}
+      {/* Filter bar — every panel below re-queries with these filters */}
       {/* ------------------------------------------------------------------ */}
       <div className="card" style={{ padding: 14, marginTop: 8 }}>
         <div className="row spread" style={{ marginBottom: 8 }}>
@@ -538,7 +538,10 @@ export function PayrollDashboardPage() {
         )}
       </Panel>
 
-      <Panel title="Monthly net salary (paid)" right={<span className="muted small">draft/computed excluded</span>}>
+      <Panel
+        title="Monthly net salary (paid)"
+        right={<span className="muted small">draft/computed excluded</span>}
+      >
         <TrendChart items={trend} />
       </Panel>
 
@@ -575,7 +578,8 @@ export function PayrollDashboardPage() {
                   { label: "computed", v: status.computed, c: "#e8943a" },
                   { label: "draft", v: status.draft, c: "#9aa4b2" },
                 ].map((s) => {
-                  const total = status.paid + status.validated + status.computed + status.draft;
+                  const total =
+                    status.paid + status.validated + status.computed + status.draft;
                   return s.v > 0 ? (
                     <div
                       key={s.label}
@@ -597,8 +601,8 @@ export function PayrollDashboardPage() {
           <>
             <p className="small muted" style={{ marginTop: 0 }}>
               {openPayslips} open payslip(s) carry warnings · {fmtNum(unvalidated)}{" "}
-              payslip(s) are not yet validated. All rows are generated from live
-              payslip / warning records.
+              payslip(s) are not yet validated. All rows are generated from
+              live payslip / warning records.
             </p>
             <table className="table">
               <thead>
@@ -622,7 +626,8 @@ export function PayrollDashboardPage() {
                   <tr key={a.warning_type}>
                     <td>
                       <span className={`badge badge-warn-${a.warning_type}`}>
-                        {WARNING_LABEL.get(a.warning_type) ?? a.warning_type.replaceAll("_", " ")}
+                        {WARNING_LABEL.get(a.warning_type) ??
+                          a.warning_type.replaceAll("_", " ")}
                       </span>
                     </td>
                     <td>{fmtNum(a.count)}</td>
@@ -656,7 +661,9 @@ export function PayrollDashboardPage() {
           </span>
         }
       >
-        {!att || att.present + att.late + att.absent + att.overtime + att.missing_checkouts === 0 ? (
+        {!att ||
+        att.present + att.late + att.absent + att.overtime + att.missing_checkouts ===
+          0 ? (
           <p className="muted">No attendance rows for the selected period.</p>
         ) : (
           <div className="cards">
@@ -664,7 +671,11 @@ export function PayrollDashboardPage() {
             <StatCell label="Late" value={fmtNum(att.late)} tone="warn" />
             <StatCell label="Absent (derived)" value={fmtNum(att.absent)} tone="bad" />
             <StatCell label="Overtime" value={fmtNum(att.overtime)} />
-            <StatCell label="Missing check-outs" value={fmtNum(att.missing_checkouts)} tone="warn" />
+            <StatCell
+              label="Missing check-outs"
+              value={fmtNum(att.missing_checkouts)}
+              tone="warn"
+            />
             <StatCell label="Manual edits" value={fmtNum(att.manual_edits)} tone="muted" />
           </div>
         )}
@@ -704,7 +715,9 @@ export function PayrollDashboardPage() {
                   <td>{fmtNum(Number(t.approved_days))}</td>
                   <td>
                     {t.pending_requests > 0 ? (
-                      <span className="badge badge-req-to_approve">{t.pending_requests}</span>
+                      <span className="badge badge-req-to_approve">
+                        {t.pending_requests}
+                      </span>
                     ) : (
                       <span className="muted">—</span>
                     )}
@@ -718,7 +731,7 @@ export function PayrollDashboardPage() {
       </Panel>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Department Overview — dept / headcount / payroll cost from payslips */}
+      {/* Department Overview — dept / headcount / payroll cost */}
       {/* ------------------------------------------------------------------ */}
       <Panel title="Department overview">
         {dept.length === 0 ? (

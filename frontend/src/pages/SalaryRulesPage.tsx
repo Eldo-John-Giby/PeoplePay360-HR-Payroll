@@ -7,8 +7,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   ApiError,
   createSalaryRule,
-  deactivateSalaryRule,
   listSalaryRules,
+  updateSalaryRule,
 } from "../api/client";
 import type {
   ComputationMethod,
@@ -16,6 +16,7 @@ import type {
   SalaryRuleCategory,
 } from "../api/types";
 import { useAuth } from "../auth";
+import { Link } from "react-router-dom";
 
 const METHOD_LABEL: Record<ComputationMethod, string> = {
   fixed: "Fixed amount",
@@ -76,7 +77,7 @@ export function SalaryRulesPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const page = await listSalaryRules({}, 200);
+      const page = await listSalaryRules();
       setRules(page.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -123,7 +124,7 @@ export function SalaryRulesPage() {
     setBusyId(rule.id);
     setError("");
     try {
-      await deactivateSalaryRule(rule.id);
+      await updateSalaryRule(rule.id, { is_active: false });
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -321,17 +322,25 @@ export function SalaryRulesPage() {
               </td>
               {canWrite && (
                 <td>
-                  {r.is_active ? (
-                    <button
+                  <div className="row-actions">
+                    <Link
                       className="btn btn-ghost btn-sm"
-                      disabled={busyId === r.id}
-                      onClick={() => void onDeactivate(r)}
+                      to={`/payroll/rules/${r.id}`}
                     >
-                      Deactivate
-                    </button>
-                  ) : (
-                    <span className="muted small">soft-deleted</span>
-                  )}
+                      Edit
+                    </Link>
+                    {r.is_active ? (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={busyId === r.id}
+                        onClick={() => void onDeactivate(r)}
+                      >
+                        Deactivate
+                      </button>
+                    ) : (
+                      <span className="muted small">soft-deleted</span>
+                    )}
+                  </div>
                 </td>
               )}
             </tr>
