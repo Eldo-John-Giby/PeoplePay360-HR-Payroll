@@ -1,5 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
-
+import "../styles.css"
 import "../landing.css";
 import { useAuth } from "../auth";
 

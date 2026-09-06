@@ -87,6 +87,75 @@ function DropdownLink({
   );
 }
 
+/** User dropdown: shows name, on click reveals email + logout */
+function UserDropdown({
+  name,
+  email,
+  roles,
+  onLogout,
+}: {
+  name: string;
+  email: string;
+  roles: string[];
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [open]);
+
+  return (
+    <div className="nav-dropdown" ref={ref}>
+      <button
+        type="button"
+        className="userbox-trigger"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="user-avatar">{name.charAt(0).toUpperCase()}</span>
+        <span className="user-meta-sm">
+          <span className="user-name">{name}</span>
+          <span className="caret" style={{ marginLeft: 4 }}>▾</span>
+        </span>
+      </button>
+      {open && (
+        <div className="dropdown-menu user-dropdown">
+          <div className="user-dropdown-header">
+            <span className="user-name">{name}</span>
+            <span className="user-roles">{roles.join(", ")}</span>
+          </div>
+          <div className="dropdown-sep" />
+          <div className="user-dropdown-email">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="20" height="16" x="2" y="4" rx="2" />
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+            </svg>
+            <span>{email}</span>
+          </div>
+          <div className="dropdown-sep" />
+          <button className="dropdown-item" onClick={onLogout} style={{ width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 12px", borderRadius: "7px", color: "var(--ink)", fontSize: "13px" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 8, flexShrink: 0 }}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" x2="9" y1="12" y2="12" />
+            </svg>
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, logout, isHr, hasRole } = useAuth();
   const location = useLocation();
@@ -176,15 +245,14 @@ export function Layout() {
           )}
         </nav>
         <div className="userbox">
-          <div className="user-meta">
-            <span className="user-name">{user?.employee?.full_name ?? user?.email}</span>
-            <span className="user-roles">
-              {user?.roles.map((r) => r.name).join(", ")}
-            </span>
-          </div>
-          <button className="btn btn-ghost" onClick={logout}>
-            Logout
-          </button>
+          {user && (
+            <UserDropdown
+              name={hasRole("ADMIN") ? "Admin" : (user.employee?.full_name ?? user.email ?? "User")}
+              email={user.email ?? ""}
+              roles={user.roles.map((r) => r.name)}
+              onLogout={logout}
+            />
+          )}
         </div>
       </header>
 

@@ -1,0 +1,7 @@
+# Local-dev override: the Windows PostgreSQL service owns 5432 on this machine,
+# so publish the compose `db` on 5435 instead. The `app` service still publishes
+# 8000 (the frontend's default /api proxy target).
+services:
+  db:
+    ports:
+      - "5435:5432"

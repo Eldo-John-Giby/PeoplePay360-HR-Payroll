@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-
+import "../styles.css"
 import { ApiError, listBalances, listMyBalances } from "../api/client";
 import type { TimeOffBalance } from "../api/types";
 import { fmtNum, useAuth } from "../auth";
@@ -9,37 +9,84 @@ function MetricCard({
   label,
   value,
   hint,
+  tone,
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  tone?: "ok" | "warn" | "danger";
 }) {
   return (
     <div className="card metric" style={{ padding: "16px", flex: 1, minWidth: 180 }}>
       <div className="row spread" style={{ marginBottom: 4 }}>
-        <span className="muted small" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <span className="muted small" style={{ fontWeight: 600 }}>
           {label}
         </span>
       </div>
-      <b style={{ fontSize: 24, display: "block", color: "#111827" }}>{value}</b>
+      <b
+        className={tone}
+        style={{ fontSize: 24, display: "block", color: tone ? undefined : "#111827" }}
+      >
+        {value}
+      </b>
       {hint && <small className="muted" style={{ marginTop: 4, display: "block" }}>{hint}</small>}
     </div>
   );
 }
 
+// Deterministic color per leave type — known types get an intentional hue,
+// anything unrecognized still gets a consistent (not random-per-render) color.
+function typeBadgeClass(name: string): string {
+  const key = name.trim().toLowerCase();
+  if (key.includes("paid time off") || key === "pto") return "badge-leave-pto";
+  if (key.includes("sick")) return "badge-leave-sick";
+  if (key.includes("work from home") || key === "wfh") return "badge-leave-wfh";
+  if (key.includes("unpaid")) return "badge-leave-unpaid";
+  if (key.includes("parental") || key.includes("maternity") || key.includes("paternity")) {
+    return "badge-leave-parental";
+  }
+
+  const palette = [
+    "badge-leave-pto",
+    "badge-leave-sick",
+    "badge-leave-wfh",
+    "badge-leave-unpaid",
+    "badge-leave-parental",
+    "badge-leave-other",
+  ];
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+function usageTone(pct: number): "ok" | "warn" | "danger" {
+  if (pct >= 80) return "danger";
+  if (pct >= 50) return "warn";
+  return "ok";
+}
+
 function TypeBadge({ name }: { name: string }) {
   return (
     <span
-      className="badge badge-muted"
-      style={{
-        padding: "4px 10px",
-        fontSize: "12px",
-        fontWeight: 600,
-        display: "inline-block",
-      }}
+      className={`badge ${typeBadgeClass(name)}`}
+      style={{ padding: "4px 10px", fontSize: "12px", fontWeight: 600, display: "inline-block" }}
     >
       {name}
     </span>
+  );
+}
+
+function UsageBar({ pct }: { pct: number }) {
+  const tone = usageTone(pct);
+  return (
+    <div className="row" style={{ gap: 8, alignItems: "center" }}>
+      <div className="bar-track" style={{ flex: 1 }}>
+        <div className={`bar-fill bar-fill-${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="small muted" style={{ width: 36, textAlign: "right" }}>
+        {pct}%
+      </span>
+    </div>
   );
 }
 
@@ -168,10 +215,12 @@ export function BalancesPage() {
           value={`${fmtNum(stats.taken)} days`}
           hint="Approved leave requests"
         />
+        {/* the headline number people actually opened this page to check */}
         <MetricCard
           label="Net Remaining"
           value={`${fmtNum(stats.remaining)} days`}
           hint="Available to take"
+          tone="ok"
         />
       </div>
 
@@ -224,8 +273,8 @@ export function BalancesPage() {
           <p className="muted">Loading live leave balances…</p>
         </div>
       ) : filteredRows.length === 0 ? (
-        <div className="card" style={{ padding: 32, textAlign: "center" }}>
-          <p className="muted" style={{ margin: 0, fontSize: 15 }}>
+        <div className="card empty-state">
+          <p className="muted" style={{ fontSize: 15 }}>
             No leave balance records found.
           </p>
           {(search || selectedType) && (
@@ -266,16 +315,7 @@ export function BalancesPage() {
                       {b.taken} / {b.allocated} {b.unit}
                     </span>
                   </div>
-                  <div style={{ background: "#eef0f4", borderRadius: 6, height: 8, overflow: "hidden" }}>
-                    <div
-                      style={{
-                        width: `${pctUsed}%`,
-                        background: "#2563eb",
-                        borderRadius: 6,
-                        height: "100%",
-                      }}
-                    />
-                  </div>
+                  <UsageBar pct={pctUsed} />
                 </div>
 
                 {/* Balance breakdown cells */}
@@ -290,7 +330,9 @@ export function BalancesPage() {
                   </div>
                   <div style={{ textAlign: "center" }}>
                     <span className="small muted" style={{ display: "block" }}>Remaining</span>
-                    <b style={{ fontSize: 16 }}>{b.remaining}</b>
+                    <b className={`balance-remaining-${usageTone(pctUsed)}`} style={{ fontSize: 16 }}>
+                      {b.remaining}
+                    </b>
                   </div>
                 </div>
               </div>
@@ -313,13 +355,18 @@ export function BalancesPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((b) => {
+              {filteredRows.map((b, idx) => {
                 const alloc = Number(b.allocated) || 0;
                 const taken = Number(b.taken) || 0;
                 const pctUsed = alloc > 0 ? Math.min(100, Math.round((taken / alloc) * 100)) : 0;
+                const prevRow = filteredRows[idx - 1];
+                const isNewGroup = isHr && idx !== 0 && (!prevRow || prevRow.employee_id !== b.employee_id);
 
                 return (
-                  <tr key={`${b.employee_id}-${b.time_off_type_id}`}>
+                  <tr
+                    key={`${b.employee_id}-${b.time_off_type_id}`}
+                    className={isNewGroup ? "row-group-start" : undefined}
+                  >
                     {isHr && (
                       <td>
                         <Link to={`/employees`} style={{ fontWeight: 600, textDecoration: "none" }}>
@@ -332,38 +379,19 @@ export function BalancesPage() {
                       <TypeBadge name={b.type_name} />
                     </td>
                     <td>
-                      <span className="badge badge-muted" style={{ textTransform: "capitalize" }}>
-                        {b.unit}
-                      </span>
+                      <span className="unit-tag">{b.unit}</span>
                     </td>
                     <td style={{ textAlign: "right", fontWeight: 500 }}>{b.allocated}</td>
                     <td style={{ textAlign: "right", color: taken > 0 ? "#4b5563" : "#9ca3af" }}>
                       {b.taken}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <span
-                        className="badge badge-muted"
-                        style={{ fontSize: 13, padding: "3px 10px" }}
-                      >
+                      <span className={`balance-remaining balance-remaining-${usageTone(pctUsed)}`}>
                         {b.remaining} {b.unit}
                       </span>
                     </td>
                     <td>
-                      <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                        <div style={{ flex: 1, background: "#eef0f4", borderRadius: 6, height: 8, overflow: "hidden" }}>
-                          <div
-                            style={{
-                              width: `${pctUsed}%`,
-                              background: "#2563eb",
-                              borderRadius: 6,
-                              height: "100%",
-                            }}
-                          />
-                        </div>
-                        <span className="small muted" style={{ width: 36, textAlign: "right" }}>
-                          {pctUsed}%
-                        </span>
-                      </div>
+                      <UsageBar pct={pctUsed} />
                     </td>
                   </tr>
                 );

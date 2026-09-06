@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-
+import "../styles.css"
+import { typeBadgeClass } from "../api/leave";
 import {
   ApiError,
   approveAllocation,
@@ -135,7 +136,7 @@ export function AllocationsPage() {
   // Filtered Rows
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      const empName = (r.employee_name ?? `#${r.employee_id}`).toLowerCase();
+      const empName = (r.employee_name ?? `#$typeBadgeClass{r.employee_id}`).toLowerCase();
       const matchesSearch =
         !searchEmployee.trim() ||
         empName.includes(searchEmployee.toLowerCase().trim()) ||

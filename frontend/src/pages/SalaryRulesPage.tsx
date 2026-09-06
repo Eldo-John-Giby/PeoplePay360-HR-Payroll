@@ -3,7 +3,7 @@
 // HR_PAYROLL_MANAGER/ADMIN only (the backend enforces this too).
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-
+import "../styles.css"
 import {
   ApiError,
   createSalaryRule,

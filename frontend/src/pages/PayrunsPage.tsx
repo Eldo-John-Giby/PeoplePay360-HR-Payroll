@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-
+import "../styles.css"
 import {
   ApiError,
   createPayrun,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-
+import "../styles.css"
 import {
   ApiError,
   approveRequest,
@@ -12,6 +12,7 @@ import {
 } from "../api/client";
 import type { RequestStatus, TimeOffRequest, TimeOffType } from "../api/types";
 import { addDaysIso, fmtDate, fmtNum, todayIso, useAuth } from "../auth";
+import { typeBadgeClass } from "../api/leave";
 
 const STATUS_LABEL: Record<RequestStatus, string> = {
   draft: "Draft",
@@ -25,19 +26,26 @@ function MetricCard({
   label,
   value,
   hint,
+  tone,
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  tone?: "ok" | "warn" | "danger";
 }) {
   return (
     <div className="card metric" style={{ padding: "16px", flex: 1, minWidth: 180 }}>
       <div className="row spread" style={{ marginBottom: 4 }}>
-        <span className="muted small" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <span className="muted small" style={{ fontWeight: 600 }}>
           {label}
         </span>
       </div>
-      <b style={{ fontSize: 24, display: "block", color: "#111827" }}>{value}</b>
+      <b
+        className={tone}
+        style={{ fontSize: 24, display: "block", color: tone ? undefined : "#111827" }}
+      >
+        {value}
+      </b>
       {hint && <small className="muted" style={{ marginTop: 4, display: "block" }}>{hint}</small>}
     </div>
   );
@@ -197,12 +205,22 @@ export function TimeOffRequestsPage() {
       <ErrorBanner message={error} />
       {notice && <div className="alert alert-ok">{notice}</div>}
 
-      {/* Metric Cards */}
+      {/* Metric Cards — tone reflects real status severity, not decoration */}
       <div className="cards" style={{ gap: 12 }}>
         <MetricCard label="Total Requests" value={fmtNum(stats.total)} hint="All submitted requests" />
-        <MetricCard label="Pending Approval" value={fmtNum(stats.pending)} hint="Awaiting review" />
-        <MetricCard label="Approved" value={fmtNum(stats.approved)} hint="Granted leave" />
-        <MetricCard label="Refused" value={fmtNum(stats.refused)} hint="Declined requests" />
+        <MetricCard
+          label="Pending Approval"
+          value={fmtNum(stats.pending)}
+          hint="Awaiting review"
+          tone={stats.pending > 0 ? "warn" : undefined}
+        />
+        <MetricCard label="Approved" value={fmtNum(stats.approved)} hint="Granted leave" tone="ok" />
+        <MetricCard
+          label="Refused"
+          value={fmtNum(stats.refused)}
+          hint="Declined requests"
+          tone={stats.refused > 0 ? "danger" : undefined}
+        />
       </div>
 
       {/* New Request Form Card */}
@@ -350,7 +368,9 @@ export function TimeOffRequestsPage() {
                   <div className="small muted">ID #{r.employee_id}</div>
                 </td>
                 <td>
-                  <span className="badge badge-muted">{r.type_name ?? `Type #${r.time_off_type_id}`}</span>
+                  <span className={`badge ${typeBadgeClass(r.type_name ?? `Type #${r.time_off_type_id}`)}`}>
+                    {r.type_name ?? `Type #${r.time_off_type_id}`}
+                  </span>
                 </td>
                 <td>
                   {fmtDate(r.date_from)} → {fmtDate(r.date_to)}
@@ -373,7 +393,9 @@ export function TimeOffRequestsPage() {
                     {STATUS_LABEL[r.status]}
                   </span>
                 </td>
-                <td className="small muted">{r.reason ?? "—"}</td>
+                <td className="small">
+                  {r.reason ? <span className="muted">{r.reason}</span> : <span className="muted-faint">—</span>}
+                </td>
                 <td style={{ textAlign: "right" }}>
                   <div className="row-actions" style={{ justifyContent: "flex-end" }}>
                     {isHr && r.status === "to_approve" && (

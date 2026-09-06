@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-
+import "../styles.css"
 import { ApiError, listEmployees } from "../api/client";
 import type { EmployeeListItem } from "../api/types";
 import { fmtDate, useAuth } from "../auth";

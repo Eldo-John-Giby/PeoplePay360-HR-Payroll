@@ -8,7 +8,7 @@ import {
 } from "../api/client";
 import type { TimeOffType, TimeOffUnit } from "../api/types";
 import { useAuth } from "../auth";
-
+import "../styles.css"
 export function TypesPage() {
   const { isHr } = useAuth();
   const [rows, setRows] = useState<TimeOffType[]>([]);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-
+import "../styles.css"
 import { ApiError, fetchUsers, updateUserRoles } from "../api/client";
 import type { UserOut } from "../api/types";
 import { useAuth } from "../auth";

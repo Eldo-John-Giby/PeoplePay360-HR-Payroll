@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-
+import "../styles.css"
 import {
   ApiError,
   deleteSalaryRule,

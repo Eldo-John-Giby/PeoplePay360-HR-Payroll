@@ -6,7 +6,7 @@
 // ascending sequence order, so later rules may reference earlier ones.
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-
+import "../styles.css"
 import {
   ApiError,
   createSalaryStructure,

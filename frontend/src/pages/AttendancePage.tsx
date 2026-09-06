@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-
+import "../styles.css"
 import {
   ApiError,
   checkIn,
@@ -30,6 +30,9 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   missing_checkout: "Missing checkout",
 };
 
+const VIEW_TABLE = "table";
+const VIEW_CARD = "card";
+
 function StatusBadge({ status }: { status: AttendanceStatus }) {
   const cls =
     status === "present"
@@ -54,20 +57,84 @@ function MetricCard({
   label,
   value,
   hint,
+  icon,
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  icon?: ReactNode;
 }) {
   return (
-    <div className="card metric" style={{ padding: "16px", flex: 1, minWidth: 160 }}>
-      <div className="row spread" style={{ marginBottom: 4 }}>
+    <div className="card metric" style={{ padding: 18, flex: 1, minWidth: 140, borderLeft: "4px solid var(--brand)" }}>
+      <div className="row spread" style={{ marginBottom: 6 }}>
+        {icon && <span style={{ color: "var(--brand)" }}>{icon}</span>}
         <span className="muted small" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           {label}
         </span>
       </div>
-      <b style={{ fontSize: 22, display: "block", color: "#111827" }}>{value}</b>
-      {hint && <small className="muted" style={{ marginTop: 4, display: "block" }}>{hint}</small>}
+      <b style={{ fontSize: 28, display: "block", color: "var(--brand)", fontWeight: 700, letterSpacing: "-0.5px" }}>{value}</b>
+      {hint && <small className="muted" style={{ marginTop: 2, display: "block" }}>{hint}</small>}
+    </div>
+  );
+}
+
+function AttendanceCardView({
+  rows,
+  action,
+}: {
+  rows: Attendance[];
+  action?: (row: Attendance) => ReactNode;
+}) {
+  return (
+    <div className="cards" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14 }}>
+      {rows.map((a) => (
+        <div key={a.id} className="card" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="user-avatar" style={{ width: 36, height: 36, fontSize: 14 }}>
+                {(a.employee_name ?? `E${a.employee_id}`).charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <b style={{ color: "var(--ink)", fontSize: 14 }}>{a.employee_name ?? `Employee #${a.employee_id}`}</b>
+                <div className="small muted" style={{ margin: 0 }}>ID #{a.employee_id}</div>
+              </div>
+            </div>
+            <StatusBadge status={a.status} />
+          </div>
+
+          <div className="kv" style={{ margin: 0, gridTemplateColumns: "90px 1fr", gap: "2px 10px", fontSize: 13 }}>
+            <dt className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px" }}>Date</dt>
+            <dd style={{ fontSize: 13, fontWeight: 500 }}>{new Date(a.check_in).toLocaleDateString()}</dd>
+
+            <dt className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px" }}>Check In</dt>
+            <dd style={{ fontSize: 13 }}>{fmtDateTime(a.check_in)}</dd>
+
+            <dt className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px" }}>Check Out</dt>
+            <dd style={{ fontSize: 13 }}>
+              {a.check_out ? (
+                <span style={{ fontWeight: 500 }}>{fmtDateTime(a.check_out)}</span>
+              ) : (
+                <span className="badge badge-warn" style={{ fontSize: 11, padding: "1px 6px" }}>Active</span>
+              )}
+            </dd>
+
+            <dt className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px" }}>Hours</dt>
+            <dd style={{ fontSize: 13, fontWeight: 600, textAlign: "right" }}>{fmtHours(a.worked_hours)}</dd>
+          </div>
+
+          {a.is_manual_correction && (
+            <div style={{ marginTop: 8, padding: "4px 8px", background: "var(--brand-tint)", borderRadius: 4, fontSize: 11, color: "var(--brand-dark)", display: "inline-block" }}>
+              Manual correction
+            </div>
+          )}
+
+          {action && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line)", display: "flex", gap: 8 }}>
+              {action(a)}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -109,8 +176,15 @@ function AttendanceTable({
           {rows.map((a) => (
             <tr key={a.id}>
               <td>
-                <b style={{ color: "#111827" }}>{a.employee_name ?? `Employee #${a.employee_id}`}</b>
-                <div className="small muted">ID #{a.employee_id}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className="user-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
+                    {(a.employee_name ?? `E${a.employee_id}`).charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <b style={{ color: "var(--ink)" }}>{a.employee_name ?? `Employee #${a.employee_id}`}</b>
+                    <div className="small muted">ID #{a.employee_id}</div>
+                  </div>
+                </div>
               </td>
               <td>{new Date(a.check_in).toLocaleDateString()}</td>
               <td>
@@ -129,7 +203,7 @@ function AttendanceTable({
               </td>
               <td>
                 {a.is_manual_correction ? (
-                  <span className="badge badge-muted">Manual correction</span>
+                  <span className="badge badge-muted">Manual</span>
                 ) : (
                   <span className="small muted">Auto punch</span>
                 )}
@@ -204,7 +278,7 @@ function EmployeeAttendance() {
 
   return (
     <div className="stack" style={{ gap: 20 }}>
-      <div className="row spread" style={{ alignItems: "center" }}>
+      <div className="row spread" style={{ alignItems: "center", marginBottom: 8 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>My Attendance</h2>
           <p className="muted small" style={{ margin: "4px 0 0" }}>
@@ -261,8 +335,32 @@ function EmployeeAttendance() {
       )}
 
       <div>
-        <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 600 }}>Recent Attendance Records</h3>
-        <AttendanceTable rows={rows} showNotes />
+        <div className="row spread" style={{ marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+            Recent Attendance Records
+          </h3>
+          <div className="seg">
+            <button
+              type="button"
+              className={VIEW_TABLE === VIEW_TABLE ? "on" : ""}
+              onClick={() => setViewMode(VIEW_TABLE)}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              className={VIEW_CARD === VIEW_CARD ? "on" : ""}
+              onClick={() => setViewMode(VIEW_CARD)}
+            >
+              Cards
+            </button>
+          </div>
+        </div>
+        {viewMode === VIEW_TABLE ? (
+          <AttendanceTable rows={rows} showNotes />
+        ) : (
+          <AttendanceCardView rows={rows} />
+        )}
       </div>
     </div>
   );
@@ -291,6 +389,7 @@ function HrAttendance() {
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "card">(VIEW_TABLE);
 
   const [editing, setEditing] = useState<Attendance | null>(null);
 
@@ -400,16 +499,34 @@ function HrAttendance() {
   return (
     <div className="stack" style={{ gap: 20 }}>
       {/* Header */}
-      <div className="row spread" style={{ alignItems: "center" }}>
+      <div className="row spread" style={{ alignItems: "center", marginBottom: 8 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Attendance — All Employees</h2>
           <p className="muted small" style={{ margin: "4px 0 0" }}>
             Monitor check-ins, run missing checkout sweeps, and apply manual corrections.
           </p>
         </div>
-        <button className="btn btn-ghost" onClick={() => void onSweep()}>
-          Run missing-checkout sweep
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="seg">
+            <button
+              type="button"
+              className={viewMode === VIEW_TABLE ? "on" : ""}
+              onClick={() => setViewMode(VIEW_TABLE)}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              className={viewMode === VIEW_CARD ? "on" : ""}
+              onClick={() => setViewMode(VIEW_CARD)}
+            >
+              Cards
+            </button>
+          </div>
+          <button className="btn btn-ghost" onClick={() => void onSweep()}>
+            Run missing-checkout sweep
+          </button>
+        </div>
       </div>
 
       <ErrorBanner message={error} />
@@ -480,16 +597,27 @@ function HrAttendance() {
         </div>
       </div>
 
-      {/* Table */}
-      <AttendanceTable
-        rows={rows}
-        showNotes
-        action={(row) => (
-          <button className="btn btn-ghost btn-sm" onClick={() => startCorrection(row)}>
-            Correct
-          </button>
-        )}
-      />
+      {/* Attendance Records */}
+      {viewMode === VIEW_TABLE ? (
+        <AttendanceTable
+          rows={rows}
+          showNotes
+          action={(row) => (
+            <button className="btn btn-ghost btn-sm" onClick={() => startCorrection(row)}>
+              Correct
+            </button>
+          )}
+        />
+      ) : (
+        <AttendanceCardView
+          rows={rows}
+          action={(row) => (
+            <button className="btn btn-ghost btn-sm" onClick={() => startCorrection(row)}>
+              Correct
+            </button>
+          )}
+        />
+      )}
 
       {/* Manual Entry or Correction Card */}
       {editing === null ? (

@@ -10,7 +10,7 @@
 //   Time off overview   -> /dashboard/time-off-overview (per-type rows)
 //   Department overview -> /dashboard/salary-by-department (cost/headcount)
 // All re-fetch together whenever the applied filters change.
-
+import "../styles.css"
 import {
   useCallback,
   useEffect,
